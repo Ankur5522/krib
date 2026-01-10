@@ -1,15 +1,15 @@
 import { type Message } from "../types";
 import { formatDistanceToNow } from "date-fns";
-import { cn } from "../lib/utils";
 import { ContactReveal } from "./ContactReveal";
+import { Clock } from "lucide-react";
+import { generateRandomName } from "../lib/randomNames";
 
 interface MessageItemProps {
   message: Message;
+  theme: any;
 }
 
-export const MessageItem = ({ message }: MessageItemProps) => {
-  const isOffered = message.type === "offered";
-
+export const MessageItem = ({ message, theme }: MessageItemProps) => {
   const tryFormatDate = (timestamp: string) => {
     try {
       return formatDistanceToNow(new Date(timestamp), { addSuffix: true });
@@ -19,25 +19,36 @@ export const MessageItem = ({ message }: MessageItemProps) => {
   };
 
   return (
-    <div
-      className={cn(
-        "rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 animate-in fade-in max-w-sm w-full",
-        isOffered ? "bg-blue-500 text-white" : "bg-purple-500 text-white"
-      )}
+    <article
+      className={`${theme.bgCard} border ${theme.border} rounded-2xl p-4 transition-all hover:scale-[1.01] ${theme.glow}`}
     >
-      <div className="p-4">
-        <div className="flex items-baseline justify-between mb-2">
-          <span className="text-xs font-semibold opacity-80">
-            {tryFormatDate(message.timestamp)}
-          </span>
+      {/* Card Header */}
+      <div className="flex items-center gap-2 mb-3 opacity-60">
+        <div
+          className={`w-7 h-7 rounded-full ${theme.accentSoft} flex items-center justify-center font-medium text-[10px]`}
+        >
+          {message.device_id.substring(0, 2).toUpperCase()}
         </div>
-
-        <p className="text-sm leading-snug mb-3 whitespace-pre-wrap break-words">
-          {message.content}
-        </p>
-
-        <ContactReveal postId={message.id} />
+        <div>
+          <div className="font-medium text-[11px]">
+            {generateRandomName(message.device_id)}
+          </div>
+          <div
+            className={`flex items-center gap-1 text-[10px] ${theme.textMuted}`}
+          >
+            <Clock className="w-2.5 h-2.5" />
+            {tryFormatDate(message.timestamp)}
+          </div>
+        </div>
       </div>
-    </div>
+
+      {/* Message Content */}
+      <p className="text-base leading-relaxed text-white mb-3 whitespace-pre-wrap break-words font-medium">
+        {message.content}
+      </p>
+
+      {/* Card Footer */}
+      <ContactReveal postId={message.id} theme={theme} />
+    </article>
   );
 };

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import useWebSocket, { ReadyState } from "react-use-websocket";
+import { Moon, Sun, MessageCircle, MapPin, Search, X } from "lucide-react";
 import { Header } from "./components/Header";
 import { MessageList } from "./components/MessageList";
 import { InputArea } from "./components/InputArea";
@@ -7,6 +8,7 @@ import { useChatStore } from "./store/useChatStore";
 import { getDeviceId } from "./lib/utils";
 import { apiGet, apiPost } from "./lib/api";
 import { type Message, type MessageType } from "./types";
+import stateAndCityData from "./data/stateandcity.json";
 
 // Use localhost:3001
 const WS_URL = "ws://localhost:3001/ws";
@@ -14,24 +16,186 @@ const WS_URL = "ws://localhost:3001/ws";
 function App() {
   const { addMessage, clearMessages, setCooldown } = useChatStore();
   const [postError, setPostError] = useState<string | null>(null);
+  const [darkMode, setDarkMode] = useState(true);
+  const [city, setCity] = useState<string>("");
+  const [state, setState] = useState<string>("Detecting...");
+  const [locationDenied, setLocationDenied] = useState(false);
+  const [isLoadingLocation, setIsLoadingLocation] = useState(true);
+  const [showCitySearch, setShowCitySearch] = useState(false);
+  const [citySearch, setCitySearch] = useState("");
+  const [availableCities, setAvailableCities] = useState<string[]>([]);
+  const [showStateSelection, setShowStateSelection] = useState(false);
+  const [stateSearch, setStateSearch] = useState("");
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
-  const { sendMessage, lastMessage, readyState } = useWebSocket(WS_URL, {
+  const { lastMessage, readyState } = useWebSocket(WS_URL, {
     shouldReconnect: () => true,
-    reconnectFiles: 10,
+    reconnectAttempts: 10,
     reconnectInterval: 3000,
   });
 
-  // Fetch initial messages when app mounts
-  useEffect(() => {
-    const fetchInitialMessages = async () => {
-      try {
-        const data = await apiGet<any[]>("/messages");
+  const theme = darkMode
+    ? {
+        bg: "bg-[#0A0A0A]",
+        bgSecondary: "bg-[#141414]",
+        bgTertiary: "bg-[#1C1C1E]",
+        bgCard: "bg-[#1C1C1E]",
+        text: "text-white",
+        textSecondary: "text-zinc-400",
+        textMuted: "text-zinc-500",
+        border: "border-zinc-800",
+        segmentBg: "bg-[#1C1C1E]",
+        segmentActive: "bg-[#2C2C2E]",
+        accent: "bg-white text-black",
+        accentSoft: "bg-zinc-800",
+        input: "bg-[#1C1C1E] border-zinc-800 text-white placeholder-zinc-500",
+        glow: "shadow-[0_0_30px_rgba(255,255,255,0.03)]",
+      }
+    : {
+        bg: "bg-[#F5F5F7]",
+        bgSecondary: "bg-white",
+        bgTertiary: "bg-zinc-100",
+        bgCard: "bg-white",
+        text: "text-black",
+        textSecondary: "text-zinc-600",
+        textMuted: "text-zinc-400",
+        border: "border-zinc-200",
+        segmentBg: "bg-zinc-200/60",
+        segmentActive: "bg-white",
+        accent: "bg-black text-white",
+        accentSoft: "bg-zinc-100",
+        input: "bg-zinc-100 border-zinc-200 text-black placeholder-zinc-400",
+        glow: "shadow-lg",
+      };
 
-        // Clear existing messages and load initial ones
+  // Check localStorage first, only request location if not found
+  useEffect(() => {
+    const savedCity = localStorage.getItem("kirb_city");
+    const savedState = localStorage.getItem("kirb_state");
+
+    if (savedCity && savedState) {
+      // Load from localStorage
+      console.log("Loading location from localStorage:", savedCity, savedState);
+      setCity(savedCity);
+      setState(savedState);
+      setIsLoadingLocation(false);
+
+      // Load available cities for the state
+      const cities =
+        (stateAndCityData as Record<string, string[]>)[savedState] || [];
+      setAvailableCities(cities);
+    } else {
+      // No saved location, request it
+      requestLocation();
+    }
+
+    // Fetch cooldown status on app load
+    fetchCooldownStatus();
+  }, [setCooldown]);
+
+  const fetchCooldownStatus = async () => {
+    try {
+      const data = await apiGet<{
+        can_post: boolean;
+        remaining_seconds: number;
+      }>("/api/cooldown");
+      if (!data.can_post && data.remaining_seconds > 0) {
+        setCooldown(data.remaining_seconds);
+      }
+    } catch (e) {
+      console.error("Failed to fetch cooldown status:", e);
+    }
+  };
+
+  const requestLocation = () => {
+    if ("geolocation" in navigator) {
+      setIsLoadingLocation(true);
+      setLocationDenied(false);
+
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const { latitude, longitude } = position.coords;
+          try {
+            // Using BigDataCloud free API - no key required
+            const response = await fetch(
+              `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`
+            );
+            const data = await response.json();
+
+            console.log("Location API response:", data);
+
+            // Get state from the response
+            const stateName = data.principalSubdivision || "Unknown";
+            console.log("Detected state:", stateName);
+
+            setState(stateName);
+
+            // Get cities for the detected state from JSON
+            const cities =
+              (stateAndCityData as Record<string, string[]>)[stateName] || [];
+            setAvailableCities(cities);
+
+            // If state not found in our data, show denied
+            if (cities.length === 0) {
+              setLocationDenied(true);
+              setState("State not in list");
+            } else {
+              setShowCitySearch(true);
+            }
+
+            setIsLoadingLocation(false);
+          } catch (error) {
+            console.error("Failed to get location:", error);
+            setState("Unknown");
+            setLocationDenied(true);
+            setIsLoadingLocation(false);
+          }
+        },
+        (error) => {
+          console.error("Geolocation error:", error);
+          setLocationDenied(true);
+          setIsLoadingLocation(false);
+          setState("Location Denied");
+        },
+        {
+          enableHighAccuracy: false,
+          timeout: 15000,
+          maximumAge: 300000, // 5 minutes cache
+        }
+      );
+    } else {
+      setState("Not Supported");
+      setLocationDenied(true);
+      setIsLoadingLocation(false);
+    }
+  };
+
+  // Fetch initial messages when app mounts and city is detected
+  useEffect(() => {
+    if (!city || locationDenied || showCitySearch) return;
+
+    const fetchInitialMessages = async () => {
+      setIsLoadingMessages(true);
+      try {
+        console.log("Fetching messages for city:", city);
+        // Send location as query parameter to backend for filtering
+        const data = await apiGet<any[]>(
+          `/messages?location=${encodeURIComponent(city)}`
+        );
+
+        // Clear existing messages first
         clearMessages();
 
-        // Adapt messages from backend format to frontend format
+        // Adapt messages from backend format (backend should already filter by location)
         if (Array.isArray(data)) {
+          console.log(`Received ${data.length} messages for ${city}`);
+          if (data.length > 0) {
+            console.log(
+              "Sample message structure:",
+              JSON.stringify(data[0], null, 2)
+            );
+          }
+
           data.forEach((msg: any) => {
             const adaptedMessage: Message = {
               id: msg.id,
@@ -46,23 +210,34 @@ function App() {
             };
             addMessage(adaptedMessage);
           });
+
+          console.log(`Added ${data.length} messages for ${city}`);
         }
       } catch (e) {
         console.error("Failed to fetch initial messages", e);
+      } finally {
+        setIsLoadingMessages(false);
       }
     };
 
     fetchInitialMessages();
-  }, [addMessage, clearMessages]);
+  }, [city, locationDenied, showCitySearch, addMessage, clearMessages]);
 
-  // Handle incoming messages from WebSocket
+  // Handle incoming messages from WebSocket - only add if from same city
   useEffect(() => {
     if (lastMessage !== null) {
       try {
         const data = JSON.parse(lastMessage.data);
         // Adapter for Rust backend format to Frontend format
-        // Rust sends: { id, browser_id, message, message_type, timestamp (number) }
+        // Rust sends: { id, browser_id, message, message_type, timestamp (number), location? }
         // Frontend expects: { id, device_id, content, type, timestamp (string), phone? }
+
+        // Only add message if it's from the same city
+        const messageLocation = data.location;
+        if (messageLocation && messageLocation !== city) {
+          console.log("Ignoring message from different city:", messageLocation);
+          return;
+        }
 
         const adaptedMessage: Message = {
           id: data.id,
@@ -81,7 +256,7 @@ function App() {
         console.error("Failed to parse message", e);
       }
     }
-  }, [lastMessage, addMessage]);
+  }, [lastMessage, addMessage, city]);
 
   const handleSendMessage = async (
     content: string,
@@ -91,17 +266,46 @@ function App() {
     const deviceId = getDeviceId();
     setPostError(null);
 
-    // Rust expect: PostMessageRequest { browser_id, message, message_type, phone?, website? }
+    // Validate that city is set
+    if (!city) {
+      console.error("Cannot send message: city is not set");
+      setPostError("Please select a city first");
+      return;
+    }
+
+    // Create optimistic message
+    const optimisticMessage: Message = {
+      id: `temp-${Date.now()}`,
+      device_id: deviceId,
+      content: content,
+      type: type,
+      timestamp: new Date().toISOString(),
+      phone: phone || undefined,
+    };
+
+    // Add message immediately to UI
+    addMessage(optimisticMessage);
+
+    // Rust expect: PostMessageRequest { browser_id, message, message_type, phone?, website?, location? }
     const payload = {
       browser_id: deviceId,
       message: content,
       message_type: type,
       phone: phone || undefined,
+      location: city, // Send user's location
       website: "", // Honeypot field - leave empty for legitimate users
     };
 
+    console.log(
+      "Sending message with payload:",
+      JSON.stringify(payload, null, 2)
+    );
+    console.log("Current city state:", city);
+    console.log("City is empty?", !city);
+
     try {
-      await apiPost("/messages", payload);
+      const response = await apiPost("/messages", payload);
+      console.log("Message sent successfully. Response:", response);
     } catch (e) {
       console.error("Failed to send message:", e);
 
@@ -136,47 +340,279 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-purple-900 font-sans">
-      {/* Desktop Header with Branding */}
-      <header className="bg-white/10 backdrop-blur-md border-b border-white/10 sticky top-0 z-50 shadow-xl">
-        <div className="max-w-5xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
-                <span className="text-white font-bold text-xl">K</span>
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-white tracking-tight">
-                  Kirb
-                </h1>
-                <p className="text-xs text-blue-200">Find Your Perfect Room</p>
-              </div>
-            </div>
-            {readyState !== ReadyState.OPEN && (
-              <div className="flex items-center gap-2 px-4 py-2 bg-yellow-500/20 rounded-lg border border-yellow-500/30">
-                <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
-                <span className="text-sm text-yellow-200 font-medium">
-                  Connecting...
-                </span>
-              </div>
+    <div
+      className={`min-h-screen ${theme.bg} ${theme.text} font-[-apple-system,BlinkMacSystemFont,'SF_Pro_Display','SF_Pro_Text',sans-serif] transition-colors duration-300`}
+    >
+      {/* Location Selection Overlay */}
+      {(locationDenied || showCitySearch) && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={(e) => {
+            // Close when clicking on backdrop
+            if (e.target === e.currentTarget && !locationDenied) {
+              setShowCitySearch(false);
+              setShowStateSelection(false);
+            }
+          }}
+        >
+          <div
+            className={`${theme.bgCard} ${theme.border} border rounded-2xl p-8 max-w-md w-full ${theme.glow} relative`}
+          >
+            {/* Close Button - Only show when not denied (don't let users close if location is required) */}
+            {!locationDenied && (
+              <button
+                onClick={() => {
+                  setShowCitySearch(false);
+                  setShowStateSelection(false);
+                }}
+                className={`absolute top-4 right-4 p-2 rounded-full ${theme.accentSoft} hover:opacity-80 transition-all`}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            )}
+
+            <MapPin className="w-16 h-16 mx-auto mb-4 text-blue-500" />
+            <h2 className="text-2xl font-bold mb-3">Select Your City</h2>
+
+            {locationDenied ? (
+              <>
+                <p className={`${theme.textSecondary} mb-6`}>
+                  Location access is required. Click below to enable it.
+                </p>
+                <button
+                  onClick={() => window.location.reload()}
+                  className={`${theme.accent} w-full px-6 py-3 rounded-full font-semibold transition-all hover:opacity-90`}
+                >
+                  Allow Location
+                </button>
+                <p className={`${theme.textMuted} text-xs mt-4`}>
+                  Make sure to click "Allow" when your browser asks for
+                  permission
+                </p>
+              </>
+            ) : showStateSelection ? (
+              <>
+                <p className={`${theme.textSecondary} mb-4 text-sm`}>
+                  Select your state manually
+                </p>
+
+                <div className="relative mb-4">
+                  <Search
+                    className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${theme.textMuted}`}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Search state..."
+                    value={stateSearch}
+                    onChange={(e) => setStateSearch(e.target.value)}
+                    className={`w-full pl-10 pr-4 py-3 rounded-lg border ${theme.border} ${theme.input} text-sm focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                  />
+                </div>
+
+                <div
+                  className="max-h-64 overflow-y-auto space-y-1 custom-scrollbar"
+                  style={{
+                    scrollbarWidth: "thin",
+                    scrollbarColor: darkMode
+                      ? "#3f3f46 transparent"
+                      : "#d4d4d8 transparent",
+                  }}
+                >
+                  {Object.keys(stateAndCityData as Record<string, string[]>)
+                    .filter((s) =>
+                      s.toLowerCase().includes(stateSearch.toLowerCase())
+                    )
+                    .map((stateName) => (
+                      <button
+                        key={stateName}
+                        onClick={() => {
+                          setState(stateName);
+                          const cities =
+                            (stateAndCityData as Record<string, string[]>)[
+                              stateName
+                            ] || [];
+                          setAvailableCities(cities);
+                          setShowStateSelection(false);
+                          setCitySearch("");
+                          setStateSearch("");
+                        }}
+                        className={`w-full text-left px-4 py-3 rounded-lg ${theme.accentSoft} hover:opacity-80 transition-all text-sm`}
+                      >
+                        {stateName}
+                      </button>
+                    ))}
+                </div>
+
+                <button
+                  onClick={() => setShowStateSelection(false)}
+                  className={`w-full mt-4 px-4 py-2 rounded-lg border ${theme.border} ${theme.textMuted} hover:opacity-80 transition-all text-xs`}
+                >
+                  Back to City Selection
+                </button>
+              </>
+            ) : (
+              <>
+                <div
+                  className={`${theme.accentSoft} px-4 py-3 rounded-lg mb-4 flex items-center justify-between`}
+                >
+                  <div>
+                    <p className={`text-xs ${theme.textMuted} mb-1`}>
+                      Detected State
+                    </p>
+                    <p className="font-semibold">{state}</p>
+                  </div>
+                  <button
+                    onClick={() => setShowStateSelection(true)}
+                    className={`text-xs px-3 py-1.5 rounded-full ${theme.accent} hover:opacity-90 transition-all`}
+                  >
+                    Change
+                  </button>
+                </div>
+
+                <div className="relative mb-4">
+                  <Search
+                    className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${theme.textMuted}`}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Search your city..."
+                    value={citySearch}
+                    onChange={(e) => setCitySearch(e.target.value)}
+                    className={`w-full pl-10 pr-4 py-3 rounded-lg border ${theme.border} ${theme.input} text-sm focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                  />
+                </div>
+
+                <div
+                  className="max-h-64 overflow-y-auto space-y-1 custom-scrollbar"
+                  style={{
+                    scrollbarWidth: "thin",
+                    scrollbarColor: darkMode
+                      ? "#3f3f46 transparent"
+                      : "#d4d4d8 transparent",
+                  }}
+                >
+                  {availableCities
+                    .filter((c) =>
+                      c.toLowerCase().includes(citySearch.toLowerCase())
+                    )
+                    .map((cityName) => (
+                      <button
+                        key={cityName}
+                        onClick={() => {
+                          setCity(cityName);
+                          setShowCitySearch(false);
+                          // Save to localStorage
+                          localStorage.setItem("kirb_city", cityName);
+                          localStorage.setItem("kirb_state", state);
+                          console.log(
+                            "Saved location to localStorage:",
+                            cityName,
+                            state
+                          );
+                        }}
+                        className={`w-full text-left px-4 py-3 rounded-lg ${theme.accentSoft} hover:opacity-80 transition-all text-sm`}
+                      >
+                        {cityName}
+                      </button>
+                    ))}
+                </div>
+
+                {availableCities.filter((c) =>
+                  c.toLowerCase().includes(citySearch.toLowerCase())
+                ).length === 0 && (
+                  <p className={`${theme.textMuted} text-center py-4 text-sm`}>
+                    No cities found
+                  </p>
+                )}
+
+                <button
+                  onClick={() => {
+                    localStorage.removeItem("kirb_city");
+                    localStorage.removeItem("kirb_state");
+                    window.location.reload();
+                  }}
+                  className={`w-full mt-4 px-4 py-2 rounded-lg border ${theme.border} ${theme.textMuted} hover:opacity-80 transition-all text-xs`}
+                >
+                  Detect Location Again
+                </button>
+              </>
             )}
           </div>
         </div>
+      )}
+
+      {/* Sticky Header */}
+      <header
+        className={`fixed top-0 left-0 right-0 z-50 ${theme.bgSecondary} border-b ${theme.border} backdrop-blur-xl`}
+      >
+        <div className="w-full max-w-[60%] md:max-w-[60%] sm:max-w-full mx-auto px-4 py-3">
+          {/* Top Row - Logo & Theme */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div
+                className={`w-8 h-8 rounded-xl ${theme.accent} flex items-center justify-center`}
+              >
+                <MessageCircle className="w-4 h-4" />
+              </div>
+              <span className="text-xl font-semibold tracking-tight">Kirb</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {/* City Display */}
+              <button
+                onClick={() => setShowCitySearch(true)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${theme.accentSoft} text-xs font-medium hover:opacity-80 transition-all`}
+                title="Click to change city"
+              >
+                <MapPin className="w-3 h-3" />
+                <span>{city || "Select City"}</span>
+              </button>
+
+              {/* Connection Status */}
+              {readyState !== ReadyState.OPEN && (
+                <div
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${theme.accentSoft} text-xs font-medium`}
+                >
+                  <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+                  <span>Connecting...</span>
+                </div>
+              )}
+
+              {/* Theme Toggle */}
+              <button
+                onClick={() => setDarkMode(!darkMode)}
+                className={`p-2 rounded-full ${theme.accentSoft} transition-all`}
+              >
+                {darkMode ? (
+                  <Sun className="w-4 h-4" />
+                ) : (
+                  <Moon className="w-4 h-4" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Tab Selector */}
+          <Header theme={theme} />
+        </div>
       </header>
 
-      {/* Main Content Area */}
-      <div className="max-w-5xl mx-auto px-6 py-8">
-        <div
-          className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl flex flex-col"
-          style={{ height: "calc(100vh - 12rem)" }}
-        >
-          <Header />
-          <main className="flex-1 overflow-hidden">
-            <MessageList />
-          </main>
-          <InputArea onSendMessage={handleSendMessage} error={postError} />
-        </div>
-      </div>
+      {/* Message Stream */}
+      <main className="pt-32 pb-24 px-4 w-full max-w-[60%] md:max-w-[60%] sm:max-w-full mx-auto">
+        <MessageList
+          theme={theme}
+          darkMode={darkMode}
+          isLoading={isLoadingMessages}
+        />
+      </main>
+
+      {/* Bottom Input Bar */}
+      <InputArea
+        onSendMessage={handleSendMessage}
+        error={postError}
+        theme={theme}
+        darkMode={darkMode}
+        city={city}
+      />
     </div>
   );
 }

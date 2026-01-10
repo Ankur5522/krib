@@ -1,36 +1,41 @@
 import { Home, Search } from "lucide-react";
 import { useChatStore } from "../store/useChatStore";
-import { cn } from "../lib/utils";
 
-export const Header = () => {
+interface HeaderProps {
+  theme: any;
+}
+
+export const Header = ({ theme }: HeaderProps) => {
   const { activeTab, setTab } = useChatStore();
 
   return (
-    <div className="border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
-      <div className="flex gap-2 p-3">
+    <div className={`relative ${theme.segmentBg} rounded-xl p-1`}>
+      {/* Sliding Background */}
+      <div
+        className={`absolute top-1 bottom-1 w-[calc(50%-4px)] ${theme.segmentActive} rounded-lg transition-all duration-300 ease-out ${theme.glow}`}
+        style={{
+          left: activeTab === "offered" ? "4px" : "calc(50% + 0px)",
+        }}
+      />
+
+      <div className="relative flex">
         <button
           onClick={() => setTab("offered")}
-          className={cn(
-            "flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-semibold text-sm transition-all duration-300",
-            activeTab === "offered"
-              ? "bg-blue-500 text-white shadow-md"
-              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-          )}
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-colors z-10 ${
+            activeTab === "offered" ? theme.text : theme.textSecondary
+          }`}
         >
-          <Home size={18} />
-          <span className="hidden sm:inline">Rooms Offered</span>
+          <Home className="w-4 h-4" />
+          Offered
         </button>
         <button
           onClick={() => setTab("requested")}
-          className={cn(
-            "flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-semibold text-sm transition-all duration-300",
-            activeTab === "requested"
-              ? "bg-purple-500 text-white shadow-md"
-              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-          )}
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-colors z-10 ${
+            activeTab === "requested" ? theme.text : theme.textSecondary
+          }`}
         >
-          <Search size={18} />
-          <span className="hidden sm:inline">Rooms Requested</span>
+          <Search className="w-4 h-4" />
+          Requested
         </button>
       </div>
     </div>

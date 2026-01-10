@@ -2,11 +2,20 @@ import { useEffect, useRef, useState } from "react";
 import { useChatStore } from "../store/useChatStore";
 import { MessageItem } from "./MessageItem";
 import { Home, Search, Loader2 } from "lucide-react";
-import { cn } from "../lib/utils";
+
+interface MessageListProps {
+  theme: any;
+  darkMode: boolean;
+  isLoading?: boolean;
+}
 
 const MESSAGES_PER_PAGE = 20;
 
-export const MessageList = () => {
+export const MessageList = ({
+  theme,
+  darkMode,
+  isLoading,
+}: MessageListProps) => {
   const { messages, activeTab } = useChatStore();
   const [displayCount, setDisplayCount] = useState(MESSAGES_PER_PAGE);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -60,25 +69,34 @@ export const MessageList = () => {
     }
   }, [displayCount]);
 
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-center py-20">
+        <div className="relative">
+          <Loader2
+            className={`w-12 h-12 ${theme.textSecondary} animate-spin`}
+          />
+        </div>
+        <p className={`text-sm ${theme.textMuted} mt-4`}>Loading messages...</p>
+      </div>
+    );
+  }
+
   if (filteredMessages.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-gray-400 animate-in fade-in">
+      <div className="flex flex-col items-center justify-center h-full text-center py-20">
         <div
-          className={cn(
-            "w-24 h-24 rounded-2xl flex items-center justify-center mb-6 shadow-lg",
-            activeTab === "offered"
-              ? "bg-linear-to-br from-blue-100 to-blue-200"
-              : "bg-linear-to-br from-purple-100 to-pink-200"
-          )}
+          className={`w-16 h-16 mx-auto mb-4 rounded-full ${theme.accentSoft} flex items-center justify-center`}
         >
           {activeTab === "offered" ? (
-            <Home size={48} className="text-blue-600" />
+            <Home className="w-8 h-8" />
           ) : (
-            <Search size={48} className="text-purple-600" />
+            <Search className="w-8 h-8" />
           )}
         </div>
-        <p className="text-2xl font-bold text-gray-700">No messages yet</p>
-        <p className="text-base text-gray-500 mt-2">Be the first to post!</p>
+        <h3 className="font-semibold mb-2">No posts yet</h3>
+        <p className={`text-sm ${theme.textMuted}`}>Be the first to post!</p>
       </div>
     );
   }
@@ -87,13 +105,34 @@ export const MessageList = () => {
     <div
       ref={scrollContainerRef}
       onScroll={handleScroll}
-      className="flex flex-col gap-3 items-end overflow-y-auto h-full px-2 py-2"
-      style={{ maxHeight: "calc(100vh - 280px)" }}
+      className="flex flex-col gap-3 overflow-y-auto h-full px-2 py-2 custom-scrollbar"
+      style={{
+        maxHeight: "calc(100vh - 280px)",
+        scrollbarWidth: "thin",
+        scrollbarColor: darkMode
+          ? "#3f3f46 transparent"
+          : "#d4d4d8 transparent",
+      }}
     >
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: ${darkMode ? "#3f3f46" : "#d4d4d8"};
+          border-radius: 3px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: ${darkMode ? "#52525b" : "#a1a1aa"};
+        }
+      `}</style>
       {hasMore && (
         <div className="w-full flex justify-center py-2">
           {isLoadingMore ? (
-            <Loader2 className="animate-spin text-gray-400" size={20} />
+            <Loader2 className={`animate-spin ${theme.textMuted}`} size={20} />
           ) : (
             <button
               onClick={() => {
@@ -105,7 +144,7 @@ export const MessageList = () => {
                   setIsLoadingMore(false);
                 }, 300);
               }}
-              className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+              className={`text-sm ${theme.textSecondary} hover:${theme.text} transition-colors`}
             >
               Load more messages
             </button>
@@ -113,7 +152,7 @@ export const MessageList = () => {
         </div>
       )}
       {displayedMessages.map((msg) => (
-        <MessageItem key={msg.id} message={msg} />
+        <MessageItem key={msg.id} message={msg} theme={theme} />
       ))}
     </div>
   );

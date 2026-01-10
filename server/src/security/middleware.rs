@@ -107,4 +107,4 @@ pub async fn burst_protection_middleware(
     }
 
     next.run(req).await
-}1
+}

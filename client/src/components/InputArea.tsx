@@ -1,17 +1,23 @@
 import { useState, useEffect } from "react";
-import { Send, Clock, AlertCircle } from "lucide-react";
+import { Send, AlertCircle } from "lucide-react";
 import { useChatStore } from "../store/useChatStore";
 import { type MessageType } from "../types";
-import { cn } from "../lib/utils";
 
 interface InputAreaProps {
   onSendMessage: (content: string, phone: string, type: MessageType) => void;
   error?: string | null;
+  theme: any;
+  darkMode: boolean;
 }
 
 const COOLDOWN_MS = 60 * 1000;
 
-export const InputArea = ({ onSendMessage, error }: InputAreaProps) => {
+export const InputArea = ({
+  onSendMessage,
+  error,
+  theme,
+  darkMode,
+}: InputAreaProps) => {
   const { activeTab, lastPostTime, markPostSent } = useChatStore();
   const [content, setContent] = useState("");
   const [phone, setPhone] = useState("");
@@ -50,82 +56,92 @@ export const InputArea = ({ onSendMessage, error }: InputAreaProps) => {
 
   const isOverLimit = content.length > 280;
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Allow Enter to create newlines, but don't submit the form
-    if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) {
-      return; // Let the default behavior (newline) happen
-    }
-  };
-
   return (
-    <div className="border-t border-gray-200 bg-white/80 backdrop-blur-sm px-4 py-3">
-      <form onSubmit={handleSubmit} className="flex items-center gap-3">
-        <input
-          type="tel"
-          placeholder="WhatsApp (optional)"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          className="w-40 px-3 py-3 text-sm bg-white rounded-lg border border-gray-300 focus:border-blue-400 focus:ring-1 focus:ring-blue-200 transition-all outline-none h-11"
-          style={{ fontSize: "16px" }}
-        />
-
-        <div className="flex-1 relative">
-          <textarea
-            className="w-full h-11 px-3 py-3 pr-16 bg-white rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-400 transition-all text-sm border border-gray-300"
-            placeholder={
-              activeTab === "offered"
-                ? "Describe your room offer..."
-                : "What are you looking for..."
-            }
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            onKeyDown={handleKeyDown}
-            maxLength={280}
-            style={{ fontSize: "16px" }}
-          />
-          <div
-            className={cn(
-              "absolute bottom-2 right-2 text-xs font-medium px-2 py-0.5 rounded",
-              content.length > 250
-                ? "bg-red-100 text-red-600"
-                : "bg-gray-100 text-gray-500"
-            )}
-          >
-            {content.length}/280
-          </div>
-        </div>
-
-        <button
-          type="submit"
-          disabled={timeLeft > 0 || !content.trim() || isOverLimit}
-          className={cn(
-            "h-11 px-6 py-2 rounded-lg font-semibold text-white transition-all flex items-center gap-2 text-sm whitespace-nowrap",
-            timeLeft > 0
-              ? "bg-gray-400 cursor-not-allowed"
-              : activeTab === "offered"
-              ? "bg-linear-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 active:scale-95 shadow-md hover:shadow-lg"
-              : "bg-linear-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 active:scale-95 shadow-md hover:shadow-lg"
+    <div className={`fixed bottom-0 left-0 right-0 z-30`}>
+      <div
+        className={`${darkMode ? "bg-[#141414]" : "bg-white"} border-t ${
+          theme.border
+        }`}
+      >
+        <div className="w-full max-w-[60%] md:max-w-[60%] sm:max-w-full mx-auto px-4 py-4">
+          {timeLeft > 0 && (
+            <div className="mb-2 flex items-center gap-2 px-3 py-2 bg-blue-100/90 rounded-lg text-xs text-blue-700">
+              <AlertCircle size={14} className="flex-shrink-0" />
+              <span>Please wait {timeLeft} seconds before posting again</span>
+            </div>
           )}
-        >
-          {timeLeft > 0 ? (
-            <>
-              <Clock size={18} className="animate-pulse" />
-              <span>{timeLeft}s</span>
-            </>
-          ) : (
-            <>
-              <Send size={18} />
-              <span>Post</span>
-            </>
+          {error && (
+            <div className="mb-2 flex items-center gap-2 px-3 py-2 bg-red-100/90 rounded-lg text-xs text-red-700">
+              <AlertCircle size={14} className="flex-shrink-0" />
+              <span>{error}</span>
+            </div>
           )}
-        </button>
-      </form>
-      {error && (
-        <div className="mt-2 flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-          <AlertCircle size={16} className="flex-shrink-0" />
-          <span>{error}</span>
+          <form onSubmit={handleSubmit}>
+            <div
+              className={`flex items-center gap-2 ${
+                darkMode ? "bg-[#252525]" : "bg-zinc-100"
+              } rounded-full px-4 py-2`}
+            >
+              {/* Phone Input - Smaller Width */}
+              <input
+                type="tel"
+                placeholder="Phone"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className={`w-24 bg-transparent text-xs focus:outline-none ${
+                  darkMode
+                    ? "text-white placeholder-zinc-500"
+                    : "text-black placeholder-zinc-400"
+                }`}
+              />
+              <div
+                className={`w-px h-4 ${
+                  darkMode ? "bg-zinc-700" : "bg-zinc-300"
+                }`}
+              />
+              {/* Message Input - Larger Width */}
+              <textarea
+                placeholder={
+                  activeTab === "offered"
+                    ? "Share what you're offering..."
+                    : "Describe what you're looking for..."
+                }
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && e.shiftKey) {
+                    e.preventDefault();
+                    handleSubmit(e);
+                  }
+                }}
+                maxLength={280}
+                rows={1}
+                className={`flex-1 bg-transparent text-sm focus:outline-none resize-none ${
+                  darkMode
+                    ? "text-white placeholder-zinc-500"
+                    : "text-black placeholder-zinc-400"
+                } py-1`}
+              />
+              <button
+                type="submit"
+                disabled={timeLeft > 0 || !content.trim() || isOverLimit}
+                className={`p-2 rounded-full ${
+                  theme.accent
+                } transition-all hover:opacity-90 ${
+                  timeLeft > 0 || !content.trim() || isOverLimit
+                    ? "opacity-40"
+                    : ""
+                }`}
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </div>
+            <div className={`text-[10px] ${theme.textMuted} mt-1 px-1`}>
+              Shift+Enter to send • {content.length}/280
+            </div>
+          </form>
         </div>
-      )}
+      </div>
     </div>
   );
 };

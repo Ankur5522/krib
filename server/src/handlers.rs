@@ -1,5 +1,5 @@
 use axum::{
-    extract::{ws::WebSocketUpgrade, State, Path},
+    extract::{ws::WebSocketUpgrade, State, Path, Query},
     http::StatusCode,
     response::Response,
     Json, Extension,
@@ -130,6 +130,7 @@ pub async fn post_message(
         request.message,
         request.message_type,
         request.phone,
+        request.location,
     );
 
     // If shadowbanned, pretend to succeed but don't broadcast
@@ -152,12 +153,25 @@ pub async fn post_message(
     Ok(Json(message))
 }
 
+use std::collections::HashMap;
+
 pub async fn get_messages(
     State(state): State<AppState>,
+    Query(params): Query<HashMap<String, String>>,
 ) -> Json<Vec<ChatMessage>> {
+    let location_filter = params.get("location");
+    
     let messages = state.get_messages()
         .await
         .into_iter()
+        .filter(|msg| {
+            // If location filter is provided, only include messages with matching location
+            if let Some(filter_location) = location_filter {
+                msg.location.as_ref().map_or(false, |loc| loc == filter_location)
+            } else {
+                true
+            }
+        })
         .map(|mut msg| {
             msg.phone = None;
             msg
@@ -205,5 +219,46 @@ pub async fn get_contact(
             StatusCode::NOT_FOUND,
             Json(json!({"error": "Message not found"}))
         ))
+    }
+}
+
+pub async fn get_cooldown(
+    State(state): State<AppState>,
+    Extension(security_ctx): Extension<SecurityContext>,
+) -> Json<serde_json::Value> {
+    // Check current rate limit status without incrementing
+    let rate_limit_result = state.rate_limiter
+        .check_rate_limit(&security_ctx.composite_key, RateLimitType::PostMessage)
+        .await;
+
+    match rate_limit_result {
+        Ok(result) => {
+            if result.allowed {
+                Json(json!({
+                    "can_post": true,
+                    "remaining_seconds": 0
+                }))
+            } else {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs();
+                let seconds_remaining = if result.reset_at > now {
+                    result.reset_at - now
+                } else {
+                    0
+                };
+                Json(json!({
+                    "can_post": false,
+                    "remaining_seconds": seconds_remaining
+                }))
+            }
+        }
+        Err(_) => {
+            Json(json!({
+                "can_post": true,
+                "remaining_seconds": 0
+            }))
+        }
     }
 }

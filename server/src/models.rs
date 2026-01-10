@@ -9,6 +9,8 @@ pub struct ChatMessage {
     pub timestamp: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub phone: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub location: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -27,10 +29,11 @@ pub struct PostMessageRequest {
     /// Honeypot field - should be empty for legitimate users
     #[serde(default)]
     pub website: Option<String>,
+    pub location: Option<String>,
 }
 
 impl ChatMessage {
-    pub fn new(browser_id: String, message: String, message_type: MessageType, phone: Option<String>) -> Self {
+    pub fn new(browser_id: String, message: String, message_type: MessageType, phone: Option<String>, location: Option<String>) -> Self {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
             browser_id,
@@ -41,6 +44,7 @@ impl ChatMessage {
                 .unwrap()
                 .as_secs(),
             phone,
+            location,
         }
     }
 }
