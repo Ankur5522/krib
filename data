@@ -1,0 +1,70 @@
+Phase 1: The Core Experience (The "Chat")
+ID
+User Story
+Acceptance Criteria
+1.1
+As a Landlord, I want to post a rental offer instantly without an account, so I can find a tenant without filling out forms.
+• Text area limited to 280 characters.
+
+• "Post" button sends message via WebSocket.
+
+• No login or OTP required.
+1.2
+As a Renter, I want to post a "Room Wanted" request, so landlords can reach out to me directly.
+• Message appears in the "Requested" tab.
+
+• Distinct styling from "Offered" posts.
+1.3
+As a User, I want to switch between "Offered" and "Requested" tabs instantly, so I can see the side of the market I care about.
+• React-state handled tab switching (zero page reload).
+
+• Real-time updates only for the active tab to save bandwidth.
+1.4
+As a User, I want to see new messages appear in real-time, so I don't have to refresh the page to find the latest deals.
+• Rust backend broadcasts new messages to all connected React clients via WebSockets immediately.
+
+Phase 2: The "Invisible" Security (The "Guardrail")
+ID
+User Story
+Acceptance Criteria
+2.1
+As a System, I want to generate a unique Device ID for every visitor, so I can track behavior without a login.
+• Rust backend uses browser headers/fingerprinting to assign a unique identifier.
+
+• Identifier is stored in a secure cookie or local storage.
+2.2
+As a System, I want to enforce a 60-second timeout per device, so that bots cannot flood the chat.
+• Redis tracks the timestamp of the last post for each Device ID.
+
+• Rust backend rejects posts if currentTime - lastPost < 60s.
+2.3
+As a User, I want to see a countdown timer after I post, so I know exactly when I can send my next message.
+• Frontend displays a visual 60s cooldown timer synchronized with the server's rate-limit.
+2.4
+As a System, I want to "Shadowban" suspicious devices, so scammers think they are posting while the community sees nothing.
+• Rust backend flags specific Device IDs.
+
+• Messages from flagged IDs are only sent back to the sender, not the global broadcast.
+
+Phase 3: Interaction & Housekeeping (The "Utility")
+ID
+User Story
+Acceptance Criteria
+3.1
+As a User, I want to click a "Contact" button that opens WhatsApp, so I can talk to the poster without their phone number being easily scraped by bots.
+• Post includes a hidden phone number field.
+
+• Clicking "Message" triggers a wa.me redirect via the backend.
+3.2
+As a System, I want to auto-delete messages after 48 hours, so the feed remains "fresh" and the database stays small.
+• Redis TTL (Time-to-Live) is set to 172,800 seconds on every post.
+
+• Data is automatically purged by the system.
+3.3
+As a User, I want to report a message for being a scam, so I can help clean the platform.
+• Each post has a "Report" icon.
+
+• If a post hits 3 unique reports (from 3 unique Device IDs), it is automatically hidden.
+3.4
+As a System, I want to filter messages for blacklisted keywords (e.g., "bank transfer," "gift card"), so common scams are blocked before they go live.
+• Rust backend runs a regex check on every incoming string against a blacklist stored in memory.

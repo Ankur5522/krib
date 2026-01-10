@@ -1,0 +1,13 @@
+use axum::{routing::get, routing::post, Router, middleware};
+use crate::{handlers, state::AppState, security::middleware::{security_middleware, burst_protection_middleware}};
+
+pub fn create_router(state: AppState) -> Router {
+    Router::new()
+        .route("/ws", get(handlers::websocket_handler))
+        .route("/messages", post(handlers::post_message))
+        .route("/messages", get(handlers::get_messages))
+        .route("/api/contact/:message_id", get(handlers::get_contact))
+        .layer(middleware::from_fn_with_state(state.clone(), burst_protection_middleware))
+        .layer(middleware::from_fn_with_state(state.clone(), security_middleware))
+        .with_state(state)
+}
