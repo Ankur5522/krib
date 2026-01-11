@@ -3,8 +3,17 @@ import { useChatStore } from "../store/useChatStore";
 import { MessageItem } from "./MessageItem";
 import { Home, Search, Loader2 } from "lucide-react";
 
+export interface Theme {
+  textSecondary: string;
+  textMuted: string;
+  accentSoft: string;
+  text: string;
+  border: string;
+  accent: string;
+}
+
 interface MessageListProps {
-  theme: any;
+  theme: Theme;
   darkMode: boolean;
   isLoading?: boolean;
 }
@@ -107,7 +116,7 @@ export const MessageList = ({
       onScroll={handleScroll}
       className="flex flex-col gap-3 overflow-y-auto h-full px-2 py-2 custom-scrollbar"
       style={{
-        maxHeight: "calc(100vh - 280px)",
+        maxHeight: "calc(100vh - 240px)",
         scrollbarWidth: "thin",
         scrollbarColor: darkMode
           ? "#3f3f46 transparent"

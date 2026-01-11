@@ -59,6 +59,67 @@ impl RateLimiter {
         Self { redis }
     }
 
+    /// Check the current rate limit status without consuming a request
+    /// 
+    /// # Arguments
+    /// * `composite_key` - The composite key identifying the user
+    /// * `limit_type` - The type of rate limit to check
+    /// 
+    /// # Returns
+    /// A result indicating the current rate limit status without incrementing
+    pub async fn check_rate_limit_status(
+        &self,
+        composite_key: &str,
+        limit_type: RateLimitType,
+    ) -> Result<RateLimitResult> {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f64();
+
+        let window_seconds = limit_type.window_seconds();
+        let max_requests = limit_type.max_requests();
+        let key = format!("{}:{}", limit_type.key_prefix(), composite_key);
+
+        // Calculate the window start time
+        let window_start = now - window_seconds as f64;
+
+        // Count current requests in the window (without modifying anything)
+        let current_count = self.redis
+            .zcount(&key, window_start, now)
+            .await
+            .map_err(|e| anyhow!("Failed to count requests: {}", e))?;
+
+        if current_count >= max_requests {
+            // Rate limit exceeded
+            // Get the oldest timestamp in the window to calculate when it expires
+            let oldest_timestamps: Vec<(String, f64)> = self.redis
+                .zrange_withscores(&key, 0, 0)
+                .await
+                .unwrap_or_else(|_| vec![]);
+            
+            let reset_at = if let Some((_, oldest_timestamp)) = oldest_timestamps.first() {
+                // Reset time is when the oldest request expires (oldest_timestamp + window_seconds)
+                (oldest_timestamp + window_seconds as f64) as u64
+            } else {
+                // Fallback: reset in full window time
+                (now + window_seconds as f64) as u64
+            };
+            
+            return Ok(RateLimitResult {
+                allowed: false,
+                remaining: 0,
+                reset_at,
+            });
+        }
+
+        Ok(RateLimitResult {
+            allowed: true,
+            remaining: max_requests - current_count,
+            reset_at: (now + window_seconds as f64) as u64,
+        })
+    }
+
     /// Check if a request is allowed under the rate limit
     /// 
     /// # Arguments

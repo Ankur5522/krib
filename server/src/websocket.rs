@@ -3,6 +3,9 @@ use crate::{models::ChatMessage, state::AppState};
 use futures::{sink::SinkExt, stream::StreamExt};
 
 pub async fn handle_websocket(socket: WebSocket, state: AppState) {
+    // Increment active connections metric
+    state.metrics.increment_connections().await;
+    
     let (mut sender, mut receiver) = socket.split();
     
     // Get Redis pub/sub connection
@@ -13,12 +16,16 @@ pub async fn handle_websocket(socket: WebSocket, state: AppState) {
         Ok(conn) => conn.into_pubsub(),
         Err(e) => {
             eprintln!("Failed to create Redis connection for WebSocket: {}", e);
+            state.metrics.decrement_connections().await;
             return;
         }
     };
 
     // Subscribe to the Redis pub/sub channel
     let channel = state.get_pubsub_channel().to_string();
+    
+    // Clone metrics for the send task
+    let metrics = state.metrics.clone();
     
     // Task 1: Send messages to this client (Redis pub/sub receiver)
     let mut send_task = tokio::spawn(async move {
@@ -91,4 +98,7 @@ pub async fn handle_websocket(socket: WebSocket, state: AppState) {
             send_task.abort();
         },
     }
+    
+    // Decrement active connections metric when disconnected
+    metrics.decrement_connections().await;
 }

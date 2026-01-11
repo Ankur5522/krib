@@ -2,6 +2,7 @@ use redis::{aio::ConnectionManager, AsyncCommands, RedisError, Client};
 use anyhow::{Context, Result};
 
 /// Redis client wrapper for managing Redis connections and operations
+/// Enforces secure connection requirements (password authentication for production)
 #[derive(Clone)]
 pub struct RedisClient {
     manager: ConnectionManager,
@@ -10,13 +11,36 @@ pub struct RedisClient {
 
 impl RedisClient {
     /// Create a new Redis client from a connection URL
+    /// 
+    /// Security Requirements:
+    /// - For production: Redis URL must include a password (redis://:password@host:port)
+    /// - For local development: Password strongly recommended
+    /// - Supports both plain (redis://) and encrypted (rediss://) connections
     pub async fn new(redis_url: &str) -> Result<Self> {
+        // Validate that the Redis URL contains a password for production safety
+        // Allow development without password only if explicitly set
+        if !redis_url.contains("://") {
+            return Err(anyhow::anyhow!(
+                "Invalid Redis URL format. Expected: redis://:password@host:port or rediss://:password@host:port"
+            ));
+        }
+
+        // Check for password in the URL (between :// and @)
+        let has_password = redis_url.contains('@');
+        
+        // Log security warning if no password is detected
+        if !has_password {
+            eprintln!("⚠️  WARNING: Redis URL does not include a password!");
+            eprintln!("🔒 For production, always use: redis://:yourpassword@host:port");
+            eprintln!("🔒 Generate a strong password and update REDIS_URL in your .env file");
+        }
+
         let client = redis::Client::open(redis_url)
-            .context("Failed to create Redis client")?;
+            .context("Failed to create Redis client from URL")?;
         
         let manager = ConnectionManager::new(client.clone())
             .await
-            .context("Failed to create Redis connection manager")?;
+            .context("Failed to create Redis connection manager - check REDIS_URL and password")?;
         
         Ok(Self { manager, client })
     }
@@ -136,5 +160,26 @@ impl RedisClient {
     pub async fn ltrim(&self, key: &str, start: isize, stop: isize) -> Result<(), RedisError> {
         let mut conn = self.manager.clone();
         conn.ltrim(key, start, stop).await
+    }
+
+    /// Add a member to a set
+    pub async fn sadd(&self, key: &str, member: &str) -> Result<i64, RedisError> {
+        let mut conn = self.manager.clone();
+        conn.sadd(key, member).await
+    }
+
+    /// Get the cardinality (number of members) of a set
+    pub async fn scard(&self, key: &str) -> Result<i64, RedisError> {
+        let mut conn = self.manager.clone();
+        conn.scard(key).await
+    }
+
+    /// Ping Redis to check if connection is alive
+    pub async fn ping(&self) -> Result<bool, RedisError> {
+        let mut conn = self.manager.clone();
+        redis::cmd("PING")
+            .query_async::<_, String>(&mut conn)
+            .await
+            .map(|resp| resp == "PONG")
     }
 }

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MessageSquare, Phone, Flag } from "lucide-react";
+import { MessageSquare, Phone } from "lucide-react";
 import { apiGet } from "../lib/api";
 
 interface ContactRevealProps {
@@ -41,17 +41,37 @@ export const ContactReveal = ({ postId, theme }: ContactRevealProps) => {
       let errorMessage = "Failed to load contact";
 
       if (err instanceof Error) {
-        // Try to parse rate limit error
+        // Try to parse error response
         try {
           const jsonMatch = err.message.match(/\{.*\}/);
           if (jsonMatch) {
             const errorData = JSON.parse(jsonMatch[0]);
-            errorMessage = errorData.message || err.message;
+
+            // Handle specific error cases
+            if (errorData.error === "No contact information available") {
+              errorMessage = "No contact info provided";
+            } else if (errorData.error === "Message not found") {
+              errorMessage = "Message not found";
+            } else if (errorData.message) {
+              errorMessage = errorData.message;
+            } else if (errorData.error) {
+              errorMessage = errorData.error;
+            }
           } else {
-            errorMessage = err.message;
+            // Clean up error message
+            const cleanError = err.message.replace(/HTTP \d+:/, "").trim();
+            if (cleanError.includes("No contact information")) {
+              errorMessage = "No contact info provided";
+            } else {
+              errorMessage = cleanError;
+            }
           }
         } catch {
-          errorMessage = err.message;
+          // If parsing fails, use the original error message
+          const cleanError = err.message.replace(/HTTP \d+:/, "").trim();
+          errorMessage = cleanError.includes("No contact information")
+            ? "No contact info provided"
+            : cleanError;
         }
       }
 
@@ -118,19 +138,13 @@ export const ContactReveal = ({ postId, theme }: ContactRevealProps) => {
   return (
     <div className="flex items-center justify-end gap-2">
       <button
-        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full ${theme.accentSoft} text-[10px] font-medium transition-all hover:opacity-80 opacity-60`}
-      >
-        <Flag className="w-3 h-3" />
-        Report
-      </button>
-      <button
         onClick={handleContactClick}
         disabled={isLoading}
-        className={`flex items-center gap-1 px-3 py-1.5 rounded-full bg-white text-black text-[10px] font-semibold transition-all hover:opacity-90 ${
-          isLoading ? "opacity-50 cursor-not-allowed" : ""
+        className={`flex items-center gap-1.5 px-4 py-2 rounded-full bg-white text-black text-xs font-semibold transition-all hover:opacity-90 ${
+          isLoading ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
         }`}
       >
-        <MessageSquare className="w-3 h-3" />
+        <MessageSquare className="w-3.5 h-3.5" />
         <span>{isLoading ? "Loading..." : "Contact"}</span>
       </button>
     </div>

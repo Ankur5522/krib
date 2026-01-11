@@ -1,20 +1,87 @@
 import { type Message } from "../types";
 import { formatDistanceToNow } from "date-fns";
 import { ContactReveal } from "./ContactReveal";
-import { Clock } from "lucide-react";
+import { Clock, Flag } from "lucide-react";
 import { generateRandomName } from "../lib/randomNames";
+import { reportMessage } from "../lib/api";
+import { useState, useEffect } from "react";
+import { getBrowserFingerprint } from "../lib/fingerprint";
 
 interface MessageItemProps {
   message: Message;
   theme: any;
 }
 
+// Helper functions for localStorage
+const getReportedMessages = (): Set<string> => {
+  try {
+    const stored = localStorage.getItem("reported_messages");
+    return stored ? new Set(JSON.parse(stored)) : new Set();
+  } catch {
+    return new Set();
+  }
+};
+
+const addReportedMessage = (messageId: string) => {
+  const reported = getReportedMessages();
+  reported.add(messageId);
+  localStorage.setItem("reported_messages", JSON.stringify([...reported]));
+};
+
+const hasReportedMessage = (messageId: string): boolean => {
+  return getReportedMessages().has(messageId);
+};
+
 export const MessageItem = ({ message, theme }: MessageItemProps) => {
+  const [isReporting, setIsReporting] = useState(false);
+  const [isReported, setIsReported] = useState(false);
+
+  // Check if this message was already reported on component mount
+  useEffect(() => {
+    const alreadyReported = hasReportedMessage(message.id);
+    if (alreadyReported) {
+      setIsReported(true);
+    }
+  }, [message.id]);
+
   const tryFormatDate = (timestamp: string) => {
     try {
       return formatDistanceToNow(new Date(timestamp), { addSuffix: true });
     } catch {
       return "Just now";
+    }
+  };
+
+  const handleReport = async () => {
+    if (isReporting || isReported) return;
+
+    setIsReporting(true);
+
+    try {
+      // Check if this is our own message
+      const fingerprint = await getBrowserFingerprint();
+
+      if (fingerprint === message.device_id) {
+        setIsReporting(false);
+        return;
+      }
+
+      // Check if already reported this message
+      if (hasReportedMessage(message.id)) {
+        setIsReporting(false);
+        setIsReported(true);
+        return;
+      }
+
+      await reportMessage(message.id, message.device_id);
+
+      // Mark as reported in localStorage
+      addReportedMessage(message.id);
+      setIsReported(true);
+    } catch (error: any) {
+      console.error("Failed to report message:", error);
+    } finally {
+      setIsReporting(false);
     }
   };
 
@@ -29,7 +96,7 @@ export const MessageItem = ({ message, theme }: MessageItemProps) => {
         >
           {message.device_id.substring(0, 2).toUpperCase()}
         </div>
-        <div>
+        <div className="flex-1">
           <div className="font-medium text-[11px]">
             {generateRandomName(message.device_id)}
           </div>
@@ -40,10 +107,34 @@ export const MessageItem = ({ message, theme }: MessageItemProps) => {
             {tryFormatDate(message.timestamp)}
           </div>
         </div>
+
+        {/* Report Button */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            handleReport();
+          }}
+          disabled={isReporting || isReported}
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-all text-xs font-medium ${
+            isReported
+              ? "bg-red-600/30 text-red-600 cursor-not-allowed"
+              : "bg-red-600/20 text-red-600 hover:bg-red-600/30 hover:text-red-700 cursor-pointer"
+          } ${isReporting ? "opacity-50 cursor-wait" : "cursor-pointer"}`}
+          title={isReported ? "Already Reported" : "Report message"}
+        >
+          <Flag className="w-3 h-3" style={{ pointerEvents: "none" }} />
+          <span style={{ pointerEvents: "none" }}>
+            {isReported ? "Reported" : "Report"}
+          </span>
+        </button>
       </div>
 
       {/* Message Content */}
-      <p className="text-base leading-relaxed text-white mb-3 whitespace-pre-wrap break-words font-medium">
+      <p
+        className={`text-base leading-relaxed ${theme.text} mb-3 whitespace-pre-wrap break-words font-medium`}
+      >
         {message.content}
       </p>
 

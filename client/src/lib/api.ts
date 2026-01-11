@@ -70,3 +70,16 @@ export async function apiGet<T>(endpoint: string): Promise<T> {
 
   return response.json();
 }
+
+/**
+ * Report a message
+ */
+export async function reportMessage(
+  messageId: string,
+  reportedBrowserId: string
+): Promise<{ success: boolean; message: string; reports_on_ip: number }> {
+  return apiPost("/api/report", {
+    message_id: messageId,
+    reported_browser_id: reportedBrowserId,
+  });
+}

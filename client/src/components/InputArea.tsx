@@ -2,11 +2,12 @@ import { useState, useEffect } from "react";
 import { Send, AlertCircle } from "lucide-react";
 import { useChatStore } from "../store/useChatStore";
 import { type MessageType } from "../types";
+import type { Theme } from "./MessageList";
 
 interface InputAreaProps {
   onSendMessage: (content: string, phone: string, type: MessageType) => void;
   error?: string | null;
-  theme: any;
+  theme: Theme;
   darkMode: boolean;
 }
 
@@ -66,13 +67,13 @@ export const InputArea = ({
         <div className="w-full max-w-[60%] md:max-w-[60%] sm:max-w-full mx-auto px-4 py-4">
           {timeLeft > 0 && (
             <div className="mb-2 flex items-center gap-2 px-3 py-2 bg-blue-100/90 rounded-lg text-xs text-blue-700">
-              <AlertCircle size={14} className="flex-shrink-0" />
+              <AlertCircle size={14} className="shrink-0" />
               <span>Please wait {timeLeft} seconds before posting again</span>
             </div>
           )}
           {error && (
             <div className="mb-2 flex items-center gap-2 px-3 py-2 bg-red-100/90 rounded-lg text-xs text-red-700">
-              <AlertCircle size={14} className="flex-shrink-0" />
+              <AlertCircle size={14} className="shrink-0" />
               <span>{error}</span>
             </div>
           )}

@@ -4,6 +4,7 @@ import { Moon, Sun, MessageCircle, MapPin, Search, X } from "lucide-react";
 import { Header } from "./components/Header";
 import { MessageList } from "./components/MessageList";
 import { InputArea } from "./components/InputArea";
+import PolicyDialog from "./components/PolicyDialog";
 import { useChatStore } from "./store/useChatStore";
 import { getDeviceId } from "./lib/utils";
 import { apiGet, apiPost } from "./lib/api";
@@ -11,22 +12,42 @@ import { type Message, type MessageType } from "./types";
 import stateAndCityData from "./data/stateandcity.json";
 
 // Use localhost:3001
-const WS_URL = "ws://localhost:3001/ws";
+const WS_URL = import.meta.env.VITE_WS_URL || "ws://localhost:3001/ws";
+
+interface BackendMessage {
+  id: string;
+  browser_id?: string;
+  device_id?: string;
+  message?: string;
+  content?: string;
+  message_type?: MessageType;
+  type?: MessageType;
+  timestamp: number | string;
+  phone?: string;
+}
 
 function App() {
   const { addMessage, clearMessages, setCooldown } = useChatStore();
   const [postError, setPostError] = useState<string | null>(null);
-  const [darkMode, setDarkMode] = useState(true);
+  const [darkMode, setDarkMode] = useState(false);
   const [city, setCity] = useState<string>("");
   const [state, setState] = useState<string>("Detecting...");
   const [locationDenied, setLocationDenied] = useState(false);
-  const [isLoadingLocation, setIsLoadingLocation] = useState(true);
+  // const [isLoadingLocation, setIsLoadingLocation] = useState(true); // Removed unused variable
   const [showCitySearch, setShowCitySearch] = useState(false);
   const [citySearch, setCitySearch] = useState("");
   const [availableCities, setAvailableCities] = useState<string[]>([]);
   const [showStateSelection, setShowStateSelection] = useState(false);
   const [stateSearch, setStateSearch] = useState("");
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+  const [policyAccepted, setPolicyAccepted] = useState(() => {
+    return localStorage.getItem("policyAccepted") === "true";
+  });
+  // Handler for accepting policy
+  const handleAcceptPolicy = () => {
+    setPolicyAccepted(true);
+    localStorage.setItem("policyAccepted", "true");
+  };
 
   const { lastMessage, readyState } = useWebSocket(WS_URL, {
     shouldReconnect: () => true,
@@ -78,7 +99,7 @@ function App() {
       console.log("Loading location from localStorage:", savedCity, savedState);
       setCity(savedCity);
       setState(savedState);
-      setIsLoadingLocation(false);
+      // setIsLoadingLocation(false); // removed
 
       // Load available cities for the state
       const cities =
@@ -109,7 +130,7 @@ function App() {
 
   const requestLocation = () => {
     if ("geolocation" in navigator) {
-      setIsLoadingLocation(true);
+      // setIsLoadingLocation(true); // removed
       setLocationDenied(false);
 
       navigator.geolocation.getCurrentPosition(
@@ -143,18 +164,18 @@ function App() {
               setShowCitySearch(true);
             }
 
-            setIsLoadingLocation(false);
+            // setIsLoadingLocation(false); // removed
           } catch (error) {
             console.error("Failed to get location:", error);
             setState("Unknown");
             setLocationDenied(true);
-            setIsLoadingLocation(false);
+            // setIsLoadingLocation(false); // removed
           }
         },
         (error) => {
           console.error("Geolocation error:", error);
           setLocationDenied(true);
-          setIsLoadingLocation(false);
+          // setIsLoadingLocation(false); // removed
           setState("Location Denied");
         },
         {
@@ -166,7 +187,7 @@ function App() {
     } else {
       setState("Not Supported");
       setLocationDenied(true);
-      setIsLoadingLocation(false);
+      // setIsLoadingLocation(false); // removed
     }
   };
 
@@ -179,7 +200,7 @@ function App() {
       try {
         console.log("Fetching messages for city:", city);
         // Send location as query parameter to backend for filtering
-        const data = await apiGet<any[]>(
+        const data = await apiGet<Message[]>(
           `/messages?location=${encodeURIComponent(city)}`
         );
 
@@ -196,11 +217,11 @@ function App() {
             );
           }
 
-          data.forEach((msg: any) => {
+          data.forEach((msg: BackendMessage) => {
             const adaptedMessage: Message = {
               id: msg.id,
-              device_id: msg.browser_id || msg.device_id,
-              content: msg.message || msg.content,
+              device_id: msg.browser_id || msg.device_id || "unknown",
+              content: msg.message || msg.content || "",
               type: (msg.message_type || msg.type) as MessageType,
               timestamp:
                 typeof msg.timestamp === "number"
@@ -239,10 +260,20 @@ function App() {
           return;
         }
 
+        // Don't add messages from the current user (already added optimistically)
+        const currentDeviceId = getDeviceId();
+        const messageBrowserId = data.browser_id || data.device_id;
+        if (messageBrowserId === currentDeviceId) {
+          console.log(
+            "Ignoring own message from WebSocket (already added optimistically)"
+          );
+          return;
+        }
+
         const adaptedMessage: Message = {
           id: data.id,
-          device_id: data.browser_id || data.device_id,
-          content: data.message || data.content,
+          device_id: data.browser_id || data.device_id || "unknown",
+          content: data.message || data.content || "",
           type: (data.message_type || data.type) as MessageType,
           timestamp:
             typeof data.timestamp === "number"
@@ -343,10 +374,35 @@ function App() {
     <div
       className={`min-h-screen ${theme.bg} ${theme.text} font-[-apple-system,BlinkMacSystemFont,'SF_Pro_Display','SF_Pro_Text',sans-serif] transition-colors duration-300`}
     >
+      {/* Always visible header */}
+      <header
+        className={`fixed top-0 left-0 right-0 z-40 ${theme.bgSecondary} border-b ${theme.border} backdrop-blur-xl`}
+      >
+        <div className="w-full max-w-[60%] md:max-w-[60%] sm:max-w-full mx-auto px-4 py-3">
+          <div className="flex items-center justify-start">
+            <div className="flex items-center gap-2">
+              <div
+                className={`w-8 h-8 rounded-xl ${theme.accent} flex items-center justify-center`}
+              >
+                <MessageCircle className="w-4 h-4" />
+              </div>
+              <span className="text-xl font-semibold tracking-tight">Kirb</span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {!policyAccepted && (
+        <PolicyDialog
+          onAccept={handleAcceptPolicy}
+          theme={theme}
+          darkMode={darkMode}
+        />
+      )}
       {/* Location Selection Overlay */}
-      {(locationDenied || showCitySearch) && (
+      {policyAccepted && (locationDenied || showCitySearch) && (
         <div
-          className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
           onClick={(e) => {
             // Close when clicking on backdrop
             if (e.target === e.currentTarget && !locationDenied) {
@@ -542,77 +598,84 @@ function App() {
       )}
 
       {/* Sticky Header */}
-      <header
-        className={`fixed top-0 left-0 right-0 z-50 ${theme.bgSecondary} border-b ${theme.border} backdrop-blur-xl`}
-      >
-        <div className="w-full max-w-[60%] md:max-w-[60%] sm:max-w-full mx-auto px-4 py-3">
-          {/* Top Row - Logo & Theme */}
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <div
-                className={`w-8 h-8 rounded-xl ${theme.accent} flex items-center justify-center`}
-              >
-                <MessageCircle className="w-4 h-4" />
-              </div>
-              <span className="text-xl font-semibold tracking-tight">Kirb</span>
-            </div>
-            <div className="flex items-center gap-2">
-              {/* City Display */}
-              <button
-                onClick={() => setShowCitySearch(true)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${theme.accentSoft} text-xs font-medium hover:opacity-80 transition-all`}
-                title="Click to change city"
-              >
-                <MapPin className="w-3 h-3" />
-                <span>{city || "Select City"}</span>
-              </button>
-
-              {/* Connection Status */}
-              {readyState !== ReadyState.OPEN && (
+      {policyAccepted ? (
+        <header
+          className={`fixed top-0 left-0 right-0 z-50 ${theme.bgSecondary} border-b ${theme.border} backdrop-blur-xl`}
+        >
+          <div className="w-full max-w-[60%] md:max-w-[60%] sm:max-w-full mx-auto px-4 py-3">
+            {/* Top Row - Logo & Theme */}
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
                 <div
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${theme.accentSoft} text-xs font-medium`}
+                  className={`w-8 h-8 rounded-xl ${theme.accent} flex items-center justify-center`}
                 >
-                  <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
-                  <span>Connecting...</span>
+                  <MessageCircle className="w-4 h-4" />
                 </div>
-              )}
+                <span className="text-xl font-semibold tracking-tight">
+                  Kirb
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                {/* City Display */}
+                <button
+                  onClick={() => setShowCitySearch(true)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${theme.accentSoft} text-xs font-medium hover:opacity-80 transition-all`}
+                  title="Click to change city"
+                >
+                  <MapPin className="w-3 h-3" />
+                  <span>{city || "Select City"}</span>
+                </button>
 
-              {/* Theme Toggle */}
-              <button
-                onClick={() => setDarkMode(!darkMode)}
-                className={`p-2 rounded-full ${theme.accentSoft} transition-all`}
-              >
-                {darkMode ? (
-                  <Sun className="w-4 h-4" />
-                ) : (
-                  <Moon className="w-4 h-4" />
+                {/* Connection Status */}
+                {readyState !== ReadyState.OPEN && (
+                  <div
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${theme.accentSoft} text-xs font-medium`}
+                  >
+                    <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+                    <span>Connecting...</span>
+                  </div>
                 )}
-              </button>
-            </div>
-          </div>
 
-          {/* Tab Selector */}
-          <Header theme={theme} />
-        </div>
-      </header>
+                {/* Theme Toggle */}
+                <button
+                  onClick={() => setDarkMode(!darkMode)}
+                  className={`p-2 rounded-full ${theme.accentSoft} transition-all`}
+                >
+                  {darkMode ? (
+                    <Sun className="w-4 h-4" />
+                  ) : (
+                    <Moon className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Tab Selector */}
+            <Header theme={theme} />
+          </div>
+        </header>
+      ) : null}
 
       {/* Message Stream */}
-      <main className="pt-32 pb-24 px-4 w-full max-w-[60%] md:max-w-[60%] sm:max-w-full mx-auto">
-        <MessageList
-          theme={theme}
-          darkMode={darkMode}
-          isLoading={isLoadingMessages}
-        />
-      </main>
+      {policyAccepted ? (
+        <main className="pt-32 px-4 w-full max-w-[60%] md:max-w-[60%] sm:max-w-full mx-auto pb-0">
+          <MessageList
+            theme={theme}
+            darkMode={darkMode}
+            isLoading={isLoadingMessages}
+          />
+        </main>
+      ) : null}
 
       {/* Bottom Input Bar */}
-      <InputArea
-        onSendMessage={handleSendMessage}
-        error={postError}
-        theme={theme}
-        darkMode={darkMode}
-        city={city}
-      />
+      {policyAccepted ? (
+        <InputArea
+          onSendMessage={handleSendMessage}
+          error={postError}
+          theme={theme}
+          darkMode={darkMode}
+        />
+      ) : null}
     </div>
   );
 }

@@ -5,7 +5,11 @@ use crate::security::{
     RateLimiter,
     ShadowbanManager,
     ContentFilter,
+    IpReputationManager,
+    BurstProfiler,
+    GovernorRateLimiter,
 };
+use crate::scaling::{RedisBroadcastService, MetricsTracker};
 use anyhow::Result;
 
 const MESSAGES_KEY: &str = "messages";
@@ -18,8 +22,13 @@ pub struct AppState {
     pub redis: RedisClient,
     pub key_generator: CompositeKeyGenerator,
     pub rate_limiter: RateLimiter,
+    pub governor_limiter: GovernorRateLimiter,
     pub shadowban_manager: ShadowbanManager,
     pub content_filter: ContentFilter,
+    pub ip_reputation: IpReputationManager,
+    pub burst_profiler: BurstProfiler,
+    pub broadcast: RedisBroadcastService,
+    pub metrics: MetricsTracker,
 }
 
 impl AppState {
@@ -28,15 +37,25 @@ impl AppState {
         let redis = RedisClient::new(redis_url).await?;
         let key_generator = CompositeKeyGenerator::new(server_secret);
         let rate_limiter = RateLimiter::new(redis.clone());
+        let governor_limiter = GovernorRateLimiter::new();
         let shadowban_manager = ShadowbanManager::new(redis.clone());
         let content_filter = ContentFilter::new();
+        let ip_reputation = IpReputationManager::new(redis.clone());
+        let burst_profiler = BurstProfiler::new(redis.clone());
+        let broadcast = RedisBroadcastService::new(redis.clone());
+        let metrics = MetricsTracker::new();
         
         Ok(Self {
             redis,
             key_generator,
             rate_limiter,
+            governor_limiter,
             shadowban_manager,
             content_filter,
+            ip_reputation,
+            burst_profiler,
+            broadcast,
+            metrics,
         })
     }
 
@@ -55,13 +74,11 @@ impl AppState {
         // Set TTL on the sorted set to auto-cleanup
         self.redis.expire(MESSAGES_KEY, MESSAGE_TTL as i64).await?;
         
-        // Publish message to Redis pub/sub channel
-        let mut conn = self.redis.get_client().get_async_connection().await?;
-        redis::cmd("PUBLISH")
-            .arg(PUBSUB_CHANNEL)
-            .arg(&message_json)
-            .query_async::<_, ()>(&mut conn)
-            .await?;
+        // Broadcast message to all server instances via Redis Pub/Sub
+        self.broadcast.broadcast_message(&message_json).await?;
+        
+        // Update metrics
+        self.metrics.increment_messages().await;
         
         Ok(())
     }

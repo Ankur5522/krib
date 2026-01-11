@@ -6,7 +6,7 @@ use axum::{
 };
 use serde_json::json;
 use crate::{
-    models::{ChatMessage, PostMessageRequest, RateLimitError, ContentFilterError},
+    models::{ChatMessage, PostMessageRequest, RateLimitError, ContentFilterError, ReportMessageRequest, ReportResponse},
     state::AppState,
     websocket::handle_websocket,
     security::middleware::SecurityContext,
@@ -50,6 +50,15 @@ pub async fn post_message(
         .is_shadowbanned(&security_ctx.composite_key)
         .await
         .unwrap_or(false);
+
+    // Also check if fingerprint is shadowbanned due to reports
+    let reported_key = format!("reported:{}", security_ctx.fingerprint);
+    let is_reported_shadowbanned = state.shadowban_manager
+        .is_shadowbanned(&reported_key)
+        .await
+        .unwrap_or(false);
+
+    let is_shadowbanned_total = is_shadowbanned || is_reported_shadowbanned;
 
     // Validate message length
     if request.message.len() > 280 {
@@ -134,7 +143,7 @@ pub async fn post_message(
     );
 
     // If shadowbanned, pretend to succeed but don't broadcast
-    if is_shadowbanned {
+    if is_shadowbanned_total {
         // Just return success without storing/broadcasting
         return Ok(Json(message));
     }
@@ -207,6 +216,9 @@ pub async fn get_contact(
     match state.get_message_by_id(&message_id).await {
         Some(message) => {
             if let Some(phone) = message.phone {
+                // Update contact reveal metric
+                state.metrics.increment_contact_reveals().await;
+                
                 Ok(Json(json!({ "phone": phone })))
             } else {
                 Err((
@@ -228,7 +240,7 @@ pub async fn get_cooldown(
 ) -> Json<serde_json::Value> {
     // Check current rate limit status without incrementing
     let rate_limit_result = state.rate_limiter
-        .check_rate_limit(&security_ctx.composite_key, RateLimitType::PostMessage)
+        .check_rate_limit_status(&security_ctx.composite_key, RateLimitType::PostMessage)
         .await;
 
     match rate_limit_result {
@@ -260,5 +272,93 @@ pub async fn get_cooldown(
                 "remaining_seconds": 0
             }))
         }
+    }
+}
+
+pub async fn report_message(
+    State(state): State<AppState>,
+    Extension(security_ctx): Extension<SecurityContext>,
+    Json(request): Json<ReportMessageRequest>,
+) -> Result<Json<ReportResponse>, (StatusCode, Json<serde_json::Value>)> {
+    // Verify the message exists
+    let message = state.get_message_by_id(&request.message_id).await;
+    if message.is_none() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Message not found"}))
+        ));
+    }
+
+    let message = message.unwrap();
+
+    // Verify the browser_id matches
+    if message.browser_id != request.reported_browser_id {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "Invalid browser ID"}))
+        ));
+    }
+
+    // Can't report your own messages
+    if message.browser_id == security_ctx.fingerprint {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "Cannot report your own message"}))
+        ));
+    }
+
+    // Add the report to IP reputation system
+    // The report links the reported fingerprint to their IP address
+    // We need to get the IP of the reported user - but we don't store that
+    // Instead, we shadowban based on fingerprint reports directly
+    
+    // For 3 reports on a fingerprint, shadowban that fingerprint
+    let report_key = format!("reports:fingerprint:{}", request.reported_browser_id);
+    let report_count = match state.redis.incr(&report_key).await {
+        Ok(count) => count,
+        Err(e) => {
+            eprintln!("Failed to increment report count: {}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "Failed to process report"}))
+            ));
+        }
+    };
+
+    // Set expiration on reports (forgive after 7 days)
+    let _ = state.redis.expire(&report_key, 604800).await;
+
+    // If 3 or more reports, shadowban the fingerprint permanently
+    if report_count >= 3 {
+        // Create a composite key for the reported user (we use fingerprint as basis)
+        let reported_composite_key = format!("reported:{}", request.reported_browser_id);
+        
+        if let Err(e) = state.shadowban_manager.shadowban(
+            &reported_composite_key,
+            Some(&format!("Auto-shadowbanned after {} reports", report_count)),
+            None, // Permanent shadowban
+        ).await {
+            eprintln!("Failed to shadowban reported user: {}", e);
+        }
+    }
+
+    Ok(Json(ReportResponse {
+        success: true,
+        message: "Report submitted successfully".to_string(),
+        reports_on_ip: report_count as usize,
+    }))
+}
+
+/// Health check endpoint for load balancer
+pub async fn health_check(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    // Use the scaling health check
+    let health = crate::scaling::HealthStatus::check(&state.redis, &state.metrics).await;
+    
+    if health.healthy {
+        Ok(Json(serde_json::to_value(health).unwrap()))
+    } else {
+        Err(StatusCode::SERVICE_UNAVAILABLE)
     }
 }

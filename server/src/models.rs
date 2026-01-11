@@ -1,5 +1,14 @@
 use serde::{Deserialize, Serialize};
 
+/// Sanitize HTML content to prevent XSS attacks
+/// Allows safe HTML tags and removes potentially dangerous ones
+fn sanitize_html(input: &str) -> String {
+    ammonia::Builder::default()
+        .link_rel(None)
+        .clean(input)
+        .to_string()
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChatMessage {
     pub id: String,
@@ -37,7 +46,8 @@ impl ChatMessage {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
             browser_id,
-            message,
+            // Sanitize message content to prevent XSS
+            message: sanitize_html(&message),
             message_type,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -46,6 +56,11 @@ impl ChatMessage {
             phone,
             location,
         }
+    }
+
+    /// Sanitize the message field (useful when loading from storage)
+    pub fn sanitize_message(&mut self) {
+        self.message = sanitize_html(&self.message);
     }
 }
 
@@ -92,4 +107,17 @@ impl ContentFilterError {
             reason,
         }
     }
+}
+
+#[derive(Deserialize, Debug)]
+pub struct ReportMessageRequest {
+    pub message_id: String,
+    pub reported_browser_id: String,
+}
+
+#[derive(Serialize)]
+pub struct ReportResponse {
+    pub success: bool,
+    pub message: String,
+    pub reports_on_ip: usize,
 }

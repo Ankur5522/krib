@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   MapPin,
   Send,
@@ -165,17 +165,17 @@ function App() {
     "Boston",
   ];
 
-  const currentPosts = posts[activeTab];
+  const currentPosts = posts[activeTab as keyof typeof posts];
 
   const handleToggleDarkMode = () => {
     setDarkMode((prev) => !prev);
   };
 
-  const handleTabChange = (tab) => {
+  const handleTabChange = (tab: "offered" | "requested") => {
     setActiveTab(tab);
   };
 
-  const handleCitySelect = (city) => {
+  const handleCitySelect = (city: string) => {
     setSelectedCity(city);
     setShowCityDropdown(false);
   };
@@ -184,7 +184,7 @@ function App() {
     setShowCityDropdown((prev) => !prev);
   };
 
-  const handleMessageChange = (e) => {
+  const handleMessageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setNewMessage(e.target.value);
   };
 
@@ -206,7 +206,10 @@ function App() {
     };
     setPosts((prev) => ({
       ...prev,
-      [activeTab]: [newPost, ...prev[activeTab]],
+      [activeTab as "offered" | "requested"]: [
+        newPost,
+        ...prev[activeTab as "offered" | "requested"],
+      ],
     }));
     setNewMessage("");
   };
