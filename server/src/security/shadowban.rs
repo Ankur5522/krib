@@ -66,6 +66,7 @@ impl ShadowbanManager {
     /// 
     /// # Arguments
     /// * `composite_key` - The composite key to un-shadowban
+    #[allow(dead_code)]
     pub async fn remove_shadowban(&self, composite_key: &str) -> Result<()> {
         let key = format!("shadowban:{}", composite_key);
         self.redis
@@ -76,6 +77,7 @@ impl ShadowbanManager {
     }
 
     /// Get the reason for a shadowban (if available)
+    #[allow(dead_code)]
     pub async fn get_shadowban_reason(&self, composite_key: &str) -> Result<Option<String>> {
         let key = format!("shadowban:{}", composite_key);
         self.redis
@@ -86,6 +88,7 @@ impl ShadowbanManager {
 
     /// Get the time-to-live for a shadowban in seconds
     /// Returns -1 for permanent bans, -2 if key doesn't exist
+    #[allow(dead_code)]
     pub async fn get_shadowban_ttl(&self, composite_key: &str) -> Result<i64> {
         let key = format!("shadowban:{}", composite_key);
         self.redis

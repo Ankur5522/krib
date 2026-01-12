@@ -30,10 +30,11 @@ impl GovernorRateLimiter {
     }
 
     /// Get remaining quota for an IP (for client feedback)
+    #[allow(dead_code)]
     pub fn get_remaining_quota(&self, ip: &str) -> u32 {
         let limiters = self.limiters.lock().unwrap();
 
-        if let Some(limiter) = limiters.get(ip) {
+        if let Some(_limiter) = limiters.get(ip) {
             // Return approximate remaining quota
             50 // Conservative estimate - actual value requires more complex tracking
         } else {

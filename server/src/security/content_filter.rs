@@ -14,6 +14,7 @@ pub struct ContentFilter {
 pub struct FilterResult {
     pub is_allowed: bool,
     pub reason: Option<String>,
+    #[allow(dead_code)]
     pub violation_type: Option<ViolationType>,
 }
 

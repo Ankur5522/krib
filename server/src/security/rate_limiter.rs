@@ -50,6 +50,7 @@ impl RateLimitType {
 #[derive(Debug)]
 pub struct RateLimitResult {
     pub allowed: bool,
+    #[allow(dead_code)]
     pub remaining: i64,
     pub reset_at: u64,
 }
@@ -224,6 +225,7 @@ impl RateLimiter {
     }
 
     /// Get the remaining time for an IP block in seconds
+    #[allow(dead_code)]
     pub async fn get_ip_block_ttl(&self, ip: &str) -> Result<i64> {
         let key = format!("blocked:ip:{}", ip);
         self.redis

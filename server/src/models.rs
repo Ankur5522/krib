@@ -59,6 +59,7 @@ impl ChatMessage {
     }
 
     /// Sanitize the message field (useful when loading from storage)
+    #[allow(dead_code)]
     pub fn sanitize_message(&mut self) {
         self.message = sanitize_html(&self.message);
     }

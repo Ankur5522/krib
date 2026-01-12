@@ -99,6 +99,33 @@ pub async fn post_message(
         ));
     }
 
+    // Run comprehensive moderation checks (profanity, relevance, spam, OpenAI)
+    let moderation_result = state.moderation_service.moderate_message(&request.message).await;
+    if !moderation_result.is_allowed {
+        // Increment violation count for moderation violations
+        if let Ok(violations) = state.shadowban_manager
+            .increment_violations(&security_ctx.composite_key)
+            .await
+        {
+            // Auto-shadowban after 3 violations (24 hour ban)
+            let _ = state.shadowban_manager
+                .auto_shadowban_on_violations(&security_ctx.composite_key, 3, 86400)
+                .await;
+            
+            eprintln!("Moderation violation by {}: {} - {} violations", 
+                     security_ctx.composite_key, 
+                     moderation_result.reason.as_ref().unwrap_or(&"Unknown violation".to_string()),
+                     violations);
+        }
+
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!(ContentFilterError::new(
+                moderation_result.reason.unwrap_or_else(|| "Content policy violation".to_string())
+            )))
+        ));
+    }
+
     // Validate phone number format if provided
     if !state.content_filter.validate_phone(request.phone.as_deref()) {
         return Err((
@@ -113,6 +140,26 @@ pub async fn post_message(
         let _ = state.shadowban_manager
             .increment_violations(&security_ctx.composite_key)
             .await;
+    }
+
+    // Check IP reputation risk level and apply cooldowns based on it
+    let ip_risk_level = state.ip_reputation
+        .get_ip_risk_level(&security_ctx.ip_address)
+        .await
+        .unwrap_or(crate::security::ip_reputation::RiskLevel::Level0);
+    
+    let visibility_mode = ip_risk_level.visibility_mode();
+    
+    // Check if IP is in cooldown based on risk level
+    if let Ok(Some(remaining)) = state.ip_reputation
+        .check_cooldown(&security_ctx.composite_key)
+        .await
+    {
+        // IP is in cooldown - return error with remaining seconds
+        return Err((
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(json!(RateLimitError::new(remaining)))
+        ));
     }
 
     // Check rate limit for posting
@@ -133,6 +180,15 @@ pub async fn post_message(
             Json(json!(RateLimitError::new(rate_limit_result.reset_at)))
         ));
     }
+    
+    // Set cooldown for the composite key based on risk level
+    let cooldown_duration = ip_risk_level.cooldown_seconds();
+    if let Err(e) = state.ip_reputation
+        .set_cooldown(&security_ctx.composite_key, cooldown_duration)
+        .await
+    {
+        eprintln!("Failed to set IP reputation cooldown: {}", e);
+    }
 
     let message = ChatMessage::new(
         request.browser_id,
@@ -142,8 +198,11 @@ pub async fn post_message(
         request.location,
     );
 
-    // If shadowbanned, pretend to succeed but don't broadcast
-    if is_shadowbanned_total {
+    // Check IP reputation visibility restrictions
+    use crate::security::ip_reputation::VisibilityMode;
+    
+    // If shadowbanned or visibility is banned, pretend to succeed but don't broadcast
+    if is_shadowbanned_total || visibility_mode == VisibilityMode::Banned {
         // Just return success without storing/broadcasting
         return Ok(Json(message));
     }
@@ -158,6 +217,15 @@ pub async fn post_message(
                 Json(json!({"error": "Failed to post message"}))
             )
         })?;
+
+    // Track message count (using Redis increment for today)
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let message_count_key = format!("stats:message_count:{}", today);
+    if let Err(e) = state.redis.incr(&message_count_key).await {
+        eprintln!("Failed to increment message count: {}", e);
+    }
+    // Set expiration to 7 days
+    let _ = state.redis.expire(&message_count_key, 604800).await;
 
     Ok(Json(message))
 }
@@ -308,9 +376,15 @@ pub async fn report_message(
     }
 
     // Add the report to IP reputation system
-    // The report links the reported fingerprint to their IP address
-    // We need to get the IP of the reported user - but we don't store that
-    // Instead, we shadowban based on fingerprint reports directly
+    // Track reports both per fingerprint and per IP address
+    // Note: We only have the reporting user's IP, not the reported user's IP
+    // So we track fingerprint-based reports to the IP reputation system
+    
+    // First, add report to IP reputation for the reporting user's IP and the reported fingerprint
+    let _ip_report_count = state.ip_reputation
+        .add_report(&security_ctx.ip_address, &request.reported_browser_id)
+        .await
+        .unwrap_or(0);
     
     // For 3 reports on a fingerprint, shadowban that fingerprint
     let report_key = format!("reports:fingerprint:{}", request.reported_browser_id);
@@ -361,4 +435,60 @@ pub async fn health_check(
     } else {
         Err(StatusCode::SERVICE_UNAVAILABLE)
     }
+}
+
+/// Track a unique visitor by IP address
+pub async fn track_visitor(
+    State(state): State<AppState>,
+    Extension(security_ctx): Extension<SecurityContext>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    // Get today's date in YYYY-MM-DD format (UTC)
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    
+    // Track unique IPs (using a Redis set for today)
+    let unique_ips_key = format!("stats:unique_ips:{}", today);
+    if let Err(e) = state.redis.sadd(&unique_ips_key, &security_ctx.ip_address).await {
+        eprintln!("Failed to track visitor IP: {}", e);
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+    
+    // Set expiration to 7 days (to clean up old stats)
+    if let Err(e) = state.redis.expire(&unique_ips_key, 604800).await {
+        eprintln!("Failed to set expiration on unique IPs: {}", e);
+    }
+    
+    Ok(Json(json!({
+        "success": true,
+        "message": "Visitor tracked"
+    })))
+}
+
+/// Get daily statistics (unique IPs and message count for the day)
+pub async fn get_daily_stats(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    // Get today's date in YYYY-MM-DD format (UTC)
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    
+    // Get unique IPs for today
+    let unique_ips_key = format!("stats:unique_ips:{}", today);
+    let unique_ips = state.redis
+        .scard(&unique_ips_key)
+        .await
+        .unwrap_or(0) as u64;
+    
+    // Get message count for today
+    let message_count_key = format!("stats:message_count:{}", today);
+    let message_count = state.redis
+        .get(&message_count_key)
+        .await
+        .ok()
+        .flatten()
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(0);
+    
+    Ok(Json(json!({
+        "unique_ips": unique_ips,
+        "message_count": message_count,
+    })))
 }

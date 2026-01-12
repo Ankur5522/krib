@@ -6,10 +6,11 @@ import { generateRandomName } from "../lib/randomNames";
 import { reportMessage } from "../lib/api";
 import { useState, useEffect } from "react";
 import { getBrowserFingerprint } from "../lib/fingerprint";
+import type { Theme } from "./MessageList";
 
 interface MessageItemProps {
   message: Message;
-  theme: any;
+  theme: Theme;
 }
 
 // Helper functions for localStorage
@@ -78,7 +79,7 @@ export const MessageItem = ({ message, theme }: MessageItemProps) => {
       // Mark as reported in localStorage
       addReportedMessage(message.id);
       setIsReported(true);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to report message:", error);
     } finally {
       setIsReporting(false);
@@ -119,8 +120,8 @@ export const MessageItem = ({ message, theme }: MessageItemProps) => {
           disabled={isReporting || isReported}
           className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-all text-xs font-medium ${
             isReported
-              ? "bg-red-600/30 text-red-600 cursor-not-allowed"
-              : "bg-red-600/20 text-red-600 hover:bg-red-600/30 hover:text-red-700 cursor-pointer"
+              ? "bg-red-500/40 text-red-400 cursor-not-allowed"
+              : "bg-red-500/30 text-red-400 hover:bg-red-500/40 hover:text-red-300 cursor-pointer"
           } ${isReporting ? "opacity-50 cursor-wait" : "cursor-pointer"}`}
           title={isReported ? "Already Reported" : "Report message"}
         >
@@ -133,13 +134,17 @@ export const MessageItem = ({ message, theme }: MessageItemProps) => {
 
       {/* Message Content */}
       <p
-        className={`text-base leading-relaxed ${theme.text} mb-3 whitespace-pre-wrap break-words font-medium`}
+        className={`text-base leading-relaxed ${theme.text} mb-3 whitespace-pre-wrap wrap-break-word font-medium`}
       >
         {message.content}
       </p>
 
       {/* Card Footer */}
-      <ContactReveal postId={message.id} theme={theme} />
+      <ContactReveal
+        postId={message.id}
+        theme={theme}
+        messageContent={message.content}
+      />
     </article>
   );
 };

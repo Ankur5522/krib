@@ -7,7 +7,7 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export const getDeviceId = (): string => {
-  const STORAGE_KEY = "kirb_device_id";
+  const STORAGE_KEY = "krib_device_id";
   let deviceId = localStorage.getItem(STORAGE_KEY);
   if (!deviceId) {
     deviceId = uuidv4();

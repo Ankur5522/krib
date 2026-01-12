@@ -70,12 +70,15 @@ async fn main() -> Result<(), anyhow::Error> {
         .layer(TimeoutLayer::new(Duration::from_secs(30))) // 30 second timeout
         .layer(cors);
 
-    println!("🚀 Server running on http://localhost:3001");
-    println!("📊 Metrics available at http://localhost:3001/metrics");
-    println!("🏥 Health check available at http://localhost:3001/health");
+    let port = env::var("PORT").unwrap_or_else(|_| "8000".to_string());
+    let addr = format!("0.0.0.0:{}", port);
+    
+    println!("🚀 Server running on http://0.0.0.0:{}", port);
+    println!("📊 Metrics available at http://0.0.0.0:{}/metrics", port);
+    println!("🏥 Health check available at http://0.0.0.0:{}/health", port);
     println!("🌐 CORS enabled for: {}", allowed_origin);
     
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3001").await?;
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
     
     // Graceful shutdown handler
     let server = axum::serve(

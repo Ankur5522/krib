@@ -58,6 +58,7 @@ impl BurstProfiler {
     }
 
     /// Get burst statistics for a composite key
+    #[allow(dead_code)]
     pub async fn get_burst_stats(&self, composite_key: &str) -> Result<BurstStats> {
         let burst_key = format!("burst:{}", composite_key);
         let entries = self.redis.zrange_withscores(&burst_key, 0, -1).await?;
@@ -77,6 +78,7 @@ impl BurstProfiler {
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
+#[allow(dead_code)]
 pub struct BurstStats {
     pub total_requests: usize,
     pub unique_endpoints_count: usize,

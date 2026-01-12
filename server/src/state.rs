@@ -8,9 +8,11 @@ use crate::security::{
     IpReputationManager,
     BurstProfiler,
     GovernorRateLimiter,
+    ModerationService,
 };
 use crate::scaling::{RedisBroadcastService, MetricsTracker};
 use anyhow::Result;
+use std::env;
 
 const MESSAGES_KEY: &str = "messages";
 const MESSAGE_KEY_PREFIX: &str = "message:";
@@ -29,6 +31,7 @@ pub struct AppState {
     pub burst_profiler: BurstProfiler,
     pub broadcast: RedisBroadcastService,
     pub metrics: MetricsTracker,
+    pub moderation_service: ModerationService,
 }
 
 impl AppState {
@@ -45,6 +48,10 @@ impl AppState {
         let broadcast = RedisBroadcastService::new(redis.clone());
         let metrics = MetricsTracker::new();
         
+        // Initialize moderation service with optional OpenAI API key
+        let openai_api_key = env::var("OPENAI_API_KEY").ok();
+        let moderation_service = ModerationService::new(openai_api_key);
+        
         Ok(Self {
             redis,
             key_generator,
@@ -56,6 +63,7 @@ impl AppState {
             burst_profiler,
             broadcast,
             metrics,
+            moderation_service,
         })
     }
 
@@ -130,6 +138,7 @@ impl AppState {
     }
 
     /// Clean up old messages (older than TTL)
+    #[allow(dead_code)]
     pub async fn cleanup_old_messages(&self) -> Result<()> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)?

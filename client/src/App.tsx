@@ -43,6 +43,10 @@ function App() {
   const [policyAccepted, setPolicyAccepted] = useState(() => {
     return localStorage.getItem("policyAccepted") === "true";
   });
+  const [dailyStats, setDailyStats] = useState<{
+    unique_ips: number;
+    message_count: number;
+  } | null>(null);
   // Handler for accepting policy
   const handleAcceptPolicy = () => {
     setPolicyAccepted(true);
@@ -91,8 +95,8 @@ function App() {
 
   // Check localStorage first, only request location if not found
   useEffect(() => {
-    const savedCity = localStorage.getItem("kirb_city");
-    const savedState = localStorage.getItem("kirb_state");
+    const savedCity = localStorage.getItem("krib_city");
+    const savedState = localStorage.getItem("krib_state");
 
     if (savedCity && savedState) {
       // Load from localStorage
@@ -112,7 +116,19 @@ function App() {
 
     // Fetch cooldown status on app load
     fetchCooldownStatus();
+    // Fetch daily stats on app load
+    fetchDailyStats();
+    // Track visitor on app load
+    trackVisitor();
   }, [setCooldown]);
+
+  // Fetch daily stats periodically (every 10 seconds)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchDailyStats();
+    }, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   const fetchCooldownStatus = async () => {
     try {
@@ -125,6 +141,35 @@ function App() {
       }
     } catch (e) {
       console.error("Failed to fetch cooldown status:", e);
+    }
+  };
+
+  const fetchDailyStats = async () => {
+    try {
+      const data = await apiGet<{
+        unique_ips: number;
+        message_count: number;
+      }>("/api/stats/daily");
+      setDailyStats(data);
+    } catch (e) {
+      console.error("Failed to fetch daily stats:", e);
+    }
+  };
+
+  const trackVisitor = async () => {
+    try {
+      // Check if we've already tracked this visitor today
+      const today = new Date().toISOString().split("T")[0];
+      const lastTrackedDate = localStorage.getItem("kirb_visitor_tracked_date");
+
+      // Only track if we haven't tracked today yet
+      if (lastTrackedDate !== today) {
+        await apiPost("/api/track-visitor", {});
+        localStorage.setItem("kirb_visitor_tracked_date", today);
+        console.log("Visitor tracked for today");
+      }
+    } catch (e) {
+      console.error("Failed to track visitor:", e);
     }
   };
 
@@ -378,7 +423,7 @@ function App() {
       <header
         className={`fixed top-0 left-0 right-0 z-40 ${theme.bgSecondary} border-b ${theme.border} backdrop-blur-xl`}
       >
-        <div className="w-full max-w-[60%] md:max-w-[60%] sm:max-w-full mx-auto px-4 py-3">
+        <div className="w-full lg:max-w-[60%] mx-auto px-4 py-3">
           <div className="flex items-center justify-start">
             <div className="flex items-center gap-2">
               <div
@@ -386,7 +431,7 @@ function App() {
               >
                 <MessageCircle className="w-4 h-4" />
               </div>
-              <span className="text-xl font-semibold tracking-tight">Kirb</span>
+              <span className="text-xl font-semibold tracking-tight">Krib</span>
             </div>
           </div>
         </div>
@@ -558,8 +603,8 @@ function App() {
                           setCity(cityName);
                           setShowCitySearch(false);
                           // Save to localStorage
-                          localStorage.setItem("kirb_city", cityName);
-                          localStorage.setItem("kirb_state", state);
+                          localStorage.setItem("krib_city", cityName);
+                          localStorage.setItem("krib_state", state);
                           console.log(
                             "Saved location to localStorage:",
                             cityName,
@@ -583,8 +628,8 @@ function App() {
 
                 <button
                   onClick={() => {
-                    localStorage.removeItem("kirb_city");
-                    localStorage.removeItem("kirb_state");
+                    localStorage.removeItem("krib_city");
+                    localStorage.removeItem("krib_state");
                     window.location.reload();
                   }}
                   className={`w-full mt-4 px-4 py-2 rounded-lg border ${theme.border} ${theme.textMuted} hover:opacity-80 transition-all text-xs`}
@@ -602,7 +647,7 @@ function App() {
         <header
           className={`fixed top-0 left-0 right-0 z-50 ${theme.bgSecondary} border-b ${theme.border} backdrop-blur-xl`}
         >
-          <div className="w-full max-w-[60%] md:max-w-[60%] sm:max-w-full mx-auto px-4 py-3">
+          <div className="w-full lg:max-w-[60%] mx-auto px-4 py-3">
             {/* Top Row - Logo & Theme */}
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -612,7 +657,7 @@ function App() {
                   <MessageCircle className="w-4 h-4" />
                 </div>
                 <span className="text-xl font-semibold tracking-tight">
-                  Kirb
+                  Krib
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -625,6 +670,21 @@ function App() {
                   <MapPin className="w-3 h-3" />
                   <span>{city || "Select City"}</span>
                 </button>
+
+                {/* Daily Stats Display */}
+                {dailyStats && (
+                  <div
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${theme.accentSoft} text-xs font-medium`}
+                  >
+                    <span title="Unique visitors today">
+                      👥 {dailyStats.unique_ips}
+                    </span>
+                    <span>•</span>
+                    <span title="Messages posted today">
+                      💬 {dailyStats.message_count}
+                    </span>
+                  </div>
+                )}
 
                 {/* Connection Status */}
                 {readyState !== ReadyState.OPEN && (
@@ -658,7 +718,7 @@ function App() {
 
       {/* Message Stream */}
       {policyAccepted ? (
-        <main className="pt-32 px-4 w-full max-w-[60%] md:max-w-[60%] sm:max-w-full mx-auto pb-0">
+        <main className="pt-32 px-4 w-full lg:max-w-[60%] mx-auto pb-0">
           <MessageList
             theme={theme}
             darkMode={darkMode}

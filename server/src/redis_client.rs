@@ -69,6 +69,7 @@ impl RedisClient {
     }
 
     /// Set key with expiration if it doesn't exist
+    #[allow(dead_code)]
     pub async fn set_nx_ex(&self, key: &str, value: &str, seconds: u64) -> Result<bool, RedisError> {
         let mut conn = self.manager.clone();
         conn.set_nx::<_, _, ()>(key, value).await?;
@@ -76,6 +77,7 @@ impl RedisClient {
     }
 
     /// Delete a key
+    #[allow(dead_code)]
     pub async fn del(&self, key: &str) -> Result<(), RedisError> {
         let mut conn = self.manager.clone();
         conn.del(key).await
@@ -130,6 +132,7 @@ impl RedisClient {
     }
 
     /// Get multiple values by keys
+    #[allow(dead_code)]
     pub async fn mget(&self, keys: &[&str]) -> Result<Vec<Option<String>>, RedisError> {
         let mut conn = self.manager.clone();
         conn.get(keys).await
@@ -145,18 +148,21 @@ impl RedisClient {
     }
 
     /// Add to a list (left push)
+    #[allow(dead_code)]
     pub async fn lpush(&self, key: &str, value: &str) -> Result<(), RedisError> {
         let mut conn = self.manager.clone();
         conn.lpush(key, value).await
     }
 
     /// Get a range from a list
+    #[allow(dead_code)]
     pub async fn lrange(&self, key: &str, start: isize, stop: isize) -> Result<Vec<String>, RedisError> {
         let mut conn = self.manager.clone();
         conn.lrange(key, start, stop).await
     }
 
     /// Trim a list to a specific size
+    #[allow(dead_code)]
     pub async fn ltrim(&self, key: &str, start: isize, stop: isize) -> Result<(), RedisError> {
         let mut conn = self.manager.clone();
         conn.ltrim(key, start, stop).await

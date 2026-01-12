@@ -10,6 +10,8 @@ export interface Theme {
   text: string;
   border: string;
   accent: string;
+  bgCard: string;
+  glow: string;
 }
 
 interface MessageListProps {
@@ -116,7 +118,9 @@ export const MessageList = ({
       onScroll={handleScroll}
       className="flex flex-col gap-3 overflow-y-auto h-full px-2 py-2 custom-scrollbar"
       style={{
-        maxHeight: "calc(100vh - 240px)",
+        maxHeight: `calc(100vh - ${
+          typeof window !== "undefined" && window.innerWidth < 768 ? 280 : 240
+        }px)`,
         scrollbarWidth: "thin",
         scrollbarColor: darkMode
           ? "#3f3f46 transparent"
@@ -124,19 +128,24 @@ export const MessageList = ({
       }}
     >
       <style>{`
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 6px;
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 6px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: ${darkMode ? "#3f3f46" : "#d4d4d8"};
+        border-radius: 3px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: ${darkMode ? "#52525b" : "#a1a1aa"};
+      }
+      @media (max-width: 768px) {
+        .custom-scrollbar {
+        max-height: calc(100vh - 280px);
         }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: ${darkMode ? "#3f3f46" : "#d4d4d8"};
-          border-radius: 3px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: ${darkMode ? "#52525b" : "#a1a1aa"};
-        }
+      }
       `}</style>
       {hasMore && (
         <div className="w-full flex justify-center py-2">

@@ -30,6 +30,7 @@ impl CompositeKeyGenerator {
     }
 
     /// Validate that a composite key matches the expected format
+    #[allow(dead_code)]
     pub fn is_valid_key(&self, key: &str) -> bool {
         // A SHA256 hash in hex is 64 characters
         key.len() == 64 && key.chars().all(|c| c.is_ascii_hexdigit())

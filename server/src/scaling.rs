@@ -29,11 +29,13 @@ impl RedisBroadcastService {
     }
 
     /// Get the pub/sub channel name
+    #[allow(dead_code)]
     pub fn get_channel(&self) -> &str {
         PUBSUB_CHANNEL
     }
 
     /// Subscribe to the broadcast channel (for WebSocket connections)
+    #[allow(dead_code)]
     pub async fn subscribe(&self) -> Result<redis::aio::PubSub> {
         let conn = self.redis.get_client().get_async_connection().await?;
         Ok(conn.into_pubsub())

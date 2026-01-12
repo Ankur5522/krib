@@ -5,9 +5,14 @@ import { apiGet } from "../lib/api";
 interface ContactRevealProps {
   postId: string;
   theme: any;
+  messageContent?: string;
 }
 
-export const ContactReveal = ({ postId, theme }: ContactRevealProps) => {
+export const ContactReveal = ({
+  postId,
+  theme,
+  messageContent = "",
+}: ContactRevealProps) => {
   const [phone, setPhone] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -84,8 +89,11 @@ export const ContactReveal = ({ postId, theme }: ContactRevealProps) => {
 
   const handleWhatsAppClick = () => {
     if (!phone) return;
-    const text = "Hi, I saw your post on Kirb...";
-    const url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+    const baseText = "Hi, I saw your post on Krib...";
+    const fullText = messageContent
+      ? `${baseText}\n\n"${messageContent}"`
+      : baseText;
+    const url = `https://wa.me/${phone}?text=${encodeURIComponent(fullText)}`;
     window.open(url, "_blank");
   };
 

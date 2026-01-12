@@ -9,6 +9,8 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/contact/:message_id", get(handlers::get_contact))
         .route("/api/cooldown", get(handlers::get_cooldown))
         .route("/api/report", post(handlers::report_message))
+        .route("/api/track-visitor", post(handlers::track_visitor))
+        .route("/api/stats/daily", get(handlers::get_daily_stats))
         .route("/health", get(handlers::health_check))
         .layer(middleware::from_fn_with_state(state.clone(), burst_protection_middleware))
         .layer(middleware::from_fn_with_state(state.clone(), security_middleware))

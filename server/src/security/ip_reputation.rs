@@ -138,6 +138,7 @@ impl IpReputationManager {
 
     /// Check if the user can post based on cooldown
     /// Returns Ok(()) if allowed, Err with remaining seconds if in cooldown
+    #[allow(dead_code)]
     pub async fn check_and_update_cooldown(
         &self,
         composite_key: &str,

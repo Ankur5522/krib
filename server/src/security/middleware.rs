@@ -18,6 +18,7 @@ pub struct SecurityContext {
 }
 
 /// Extension trait to get security context from request
+#[allow(dead_code)]
 pub trait SecurityContextExt {
     fn security_context(&self) -> Option<&SecurityContext>;
 }
