@@ -1,6 +1,11 @@
 import { getBrowserFingerprint } from "./fingerprint";
 
-const API_BASE_URL = "http://localhost:3001";
+const API_BASE_URL =
+  import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
+
+export const WS_BASE_URL =
+  import.meta.env.VITE_BACKEND_URL?.replace(/^http/, "ws") ||
+  "ws://localhost:5000";
 
 /**
  * Get headers with browser fingerprint for API requests

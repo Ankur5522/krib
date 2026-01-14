@@ -2,7 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { useChatStore } from "../store/useChatStore";
 import { type Message } from "../types";
 
-const WS_URL = "ws://localhost:3001/ws";
+import { WS_BASE_URL } from "../lib/api";
+
+const getWsUrl = () => {
+  const wsUrl = WS_BASE_URL || "ws://localhost:3001";
+  return `${wsUrl}/ws`;
+};
+const WS_URL = getWsUrl();
 const RECONNECT_DELAY = 3000;
 const MAX_RECONNECT_ATTEMPTS = 10;
 
