@@ -10,10 +10,10 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy manifests
-COPY Cargo.toml Cargo.lock ./
+COPY server/Cargo.toml server/Cargo.lock ./
 
 # Copy source code
-COPY src ./src
+COPY server/src ./src
 
 # Build the application
 RUN cargo build --release
