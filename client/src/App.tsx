@@ -7,12 +7,16 @@ import { InputArea } from "./components/InputArea";
 import PolicyDialog from "./components/PolicyDialog";
 import { useChatStore } from "./store/useChatStore";
 import { getDeviceId } from "./lib/utils";
-import { apiGet, apiPost } from "./lib/api";
+import { apiGet, apiPost, WS_BASE_URL } from "./lib/api";
 import { type Message, type MessageType } from "./types";
 import stateAndCityData from "./data/stateandcity.json";
 
-// Use localhost:3001
-const WS_URL = import.meta.env.VITE_WS_URL || "ws://localhost:3001/ws";
+// WebSocket URL with dynamic protocol conversion
+const getWsUrl = () => {
+  const ws = WS_BASE_URL || "ws://localhost:3001";
+  return `${ws}/ws`;
+};
+const WS_URL = getWsUrl();
 
 interface BackendMessage {
   id: string;
