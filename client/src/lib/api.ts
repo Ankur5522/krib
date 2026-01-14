@@ -3,9 +3,17 @@ import { getBrowserFingerprint } from "./fingerprint";
 const API_BASE_URL =
   import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
 
-export const WS_BASE_URL =
-  import.meta.env.VITE_BACKEND_URL?.replace(/^http/, "ws") ||
-  "ws://localhost:5000";
+export const WS_BASE_URL = (() => {
+  const backendUrl = import.meta.env.VITE_BACKEND_URL || "ws://localhost:5000";
+  // Convert https:// to wss://, http:// to ws://
+  if (backendUrl.startsWith("https://")) {
+    return backendUrl.replace("https://", "wss://");
+  }
+  if (backendUrl.startsWith("http://")) {
+    return backendUrl.replace("http://", "ws://");
+  }
+  return backendUrl;
+})();
 
 /**
  * Get headers with browser fingerprint for API requests
