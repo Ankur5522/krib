@@ -10,7 +10,10 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy manifests
-COPY server/Cargo.toml server/Cargo.lock ./
+COPY server/Cargo.toml ./
+
+# Copy Cargo.lock if it exists
+COPY server/Cargo.lock* ./
 
 # Copy source code
 COPY server/src ./src
