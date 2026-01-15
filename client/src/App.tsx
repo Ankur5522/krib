@@ -111,7 +111,6 @@ function App() {
 
     if (savedCity && savedState) {
       // Load from localStorage
-      console.log("Loading location from localStorage:", savedCity, savedState);
       setCity(savedCity);
       setState(savedState);
       // setIsLoadingLocation(false); // removed
@@ -151,7 +150,7 @@ function App() {
         setCooldown(data.remaining_seconds);
       }
     } catch (e) {
-      console.error("Failed to fetch cooldown status:", e);
+      // Silently handle error
     }
   };
 
@@ -163,7 +162,7 @@ function App() {
       }>("/api/stats/daily");
       setDailyStats(data);
     } catch (e) {
-      console.error("Failed to fetch daily stats:", e);
+      // Silently handle error
     }
   };
 
@@ -177,10 +176,9 @@ function App() {
       if (lastTrackedDate !== today) {
         await apiPost("/api/track-visitor", {});
         localStorage.setItem("kirb_visitor_tracked_v2", today);
-        console.log("Visitor tracked for today");
       }
     } catch (e) {
-      console.error("Failed to track visitor:", e);
+      // Silently handle error
     }
   };
 
@@ -199,11 +197,8 @@ function App() {
             );
             const data = await response.json();
 
-            console.log("Location API response:", data);
-
             // Get state from the response
             const stateName = data.principalSubdivision || "Unknown";
-            console.log("Detected state:", stateName);
 
             setState(stateName);
 
@@ -222,14 +217,14 @@ function App() {
 
             // setIsLoadingLocation(false); // removed
           } catch (error) {
-            console.error("Failed to get location:", error);
             setState("Unknown");
             setLocationDenied(true);
+            void error;
             // setIsLoadingLocation(false); // removed
           }
         },
         (error) => {
-          console.error("Geolocation error:", error);
+          void error;
           setLocationDenied(true);
           // setIsLoadingLocation(false); // removed
           setState("Location Denied");
@@ -254,7 +249,6 @@ function App() {
     const fetchInitialMessages = async () => {
       setIsLoadingMessages(true);
       try {
-        console.log("Fetching messages for city:", city);
         // Send location as query parameter to backend for filtering
         const data = await apiGet<Message[]>(
           `/messages?location=${encodeURIComponent(city)}`
@@ -265,14 +259,6 @@ function App() {
 
         // Adapt messages from backend format (backend should already filter by location)
         if (Array.isArray(data)) {
-          console.log(`Received ${data.length} messages for ${city}`);
-          if (data.length > 0) {
-            console.log(
-              "Sample message structure:",
-              JSON.stringify(data[0], null, 2)
-            );
-          }
-
           data.forEach((msg: BackendMessage) => {
             const adaptedMessage: Message = {
               id: msg.id,
@@ -287,11 +273,9 @@ function App() {
             };
             addMessage(adaptedMessage);
           });
-
-          console.log(`Added ${data.length} messages for ${city}`);
         }
       } catch (e) {
-        console.error("Failed to fetch initial messages", e);
+        // Silently handle error
       } finally {
         setIsLoadingMessages(false);
       }
@@ -312,7 +296,6 @@ function App() {
         // Only add message if it's from the same city
         const messageLocation = data.location;
         if (messageLocation && messageLocation !== city) {
-          console.log("Ignoring message from different city:", messageLocation);
           return;
         }
 
@@ -320,9 +303,6 @@ function App() {
         const currentDeviceId = getDeviceId();
         const messageBrowserId = data.browser_id || data.device_id;
         if (messageBrowserId === currentDeviceId) {
-          console.log(
-            "Ignoring own message from WebSocket (already added optimistically)"
-          );
           return;
         }
 
@@ -340,7 +320,7 @@ function App() {
 
         addMessage(adaptedMessage);
       } catch (e) {
-        console.error("Failed to parse message", e);
+        // Silently handle error
       }
     }
   }, [lastMessage, addMessage, city]);
@@ -355,7 +335,6 @@ function App() {
 
     // Validate that city is set
     if (!city) {
-      console.error("Cannot send message: city is not set");
       setPostError("Please select a city first");
       return;
     }
@@ -383,19 +362,11 @@ function App() {
       website: "", // Honeypot field - leave empty for legitimate users
     };
 
-    console.log(
-      "Sending message with payload:",
-      JSON.stringify(payload, null, 2)
-    );
-    console.log("Current city state:", city);
-    console.log("City is empty?", !city);
-
     try {
-      const response = await apiPost("/messages", payload);
-      console.log("Message sent successfully. Response:", response);
+      await apiPost("/messages", payload);
     } catch (e) {
-      console.error("Failed to send message:", e);
-
+      // Handle error
+      void e;
       // Try to parse the error message
       const errorMessage =
         e instanceof Error ? e.message : "Failed to send message";
@@ -637,11 +608,6 @@ function App() {
                           // Save to localStorage
                           localStorage.setItem("krib_city", cityName);
                           localStorage.setItem("krib_state", state);
-                          console.log(
-                            "Saved location to localStorage:",
-                            cityName,
-                            state
-                          );
                         }}
                         className={`w-full text-left px-4 py-3 rounded-lg ${theme.accentSoft} hover:opacity-80 transition-all text-sm`}
                       >

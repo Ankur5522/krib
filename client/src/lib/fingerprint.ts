@@ -17,8 +17,7 @@ export async function getBrowserFingerprint(): Promise<string> {
     const fingerprint = await getFingerprint();
     cachedFingerprint = fingerprint;
     return fingerprint;
-  } catch (error) {
-    console.error("Failed to generate browser fingerprint:", error);
+  } catch {
     // Fallback to a simple hash if thumbmark fails
     cachedFingerprint = generateFallbackFingerprint();
     return cachedFingerprint;

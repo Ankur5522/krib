@@ -90,9 +90,7 @@ export function CityStats({
       } catch {
         // localStorage might be full, ignore
       }
-    } catch (error) {
-      console.error("Failed to fetch city stats:", error);
-
+    } catch {
       // Try to use stale cache if fetch fails
       const cached = localStorage.getItem(cacheKey);
       if (cached) {

@@ -25,7 +25,6 @@ export const useWebSocket = () => {
       const ws = new WebSocket(WS_URL);
 
       ws.onopen = () => {
-        console.log("WebSocket connected");
         setIsConnected(true);
         setError(null);
         reconnectAttemptsRef.current = 0;
@@ -36,7 +35,7 @@ export const useWebSocket = () => {
           const message: Message = JSON.parse(event.data);
           addMessage(message);
         } catch (err) {
-          console.error("Failed to parse message:", err);
+          // Silently handle error
         }
       };
 
@@ -46,16 +45,12 @@ export const useWebSocket = () => {
       };
 
       ws.onclose = () => {
-        console.log("WebSocket disconnected");
         setIsConnected(false);
         wsRef.current = null;
 
         // Attempt to reconnect
         if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
           reconnectAttemptsRef.current++;
-          console.log(
-            `Reconnecting... (attempt ${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})`
-          );
           reconnectTimeoutRef.current = setTimeout(() => {
             connect();
           }, RECONNECT_DELAY);
@@ -66,7 +61,6 @@ export const useWebSocket = () => {
 
       wsRef.current = ws;
     } catch (err) {
-      console.error("Failed to create WebSocket:", err);
       setError("Failed to establish connection");
     }
   };

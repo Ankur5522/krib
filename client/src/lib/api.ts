@@ -5,20 +5,16 @@ const API_BASE_URL =
 
 export const WS_BASE_URL = (() => {
   const backendUrl = import.meta.env.VITE_BACKEND_URL || "ws://localhost:5000";
-  console.log("🔍 VITE_BACKEND_URL:", import.meta.env.VITE_BACKEND_URL);
 
   // Convert https:// to wss://, http:// to ws://
   if (backendUrl.startsWith("https://")) {
     const wsUrl = backendUrl.replace("https://", "wss://");
-    console.log("✅ WebSocket URL (HTTPS→WSS):", wsUrl);
     return wsUrl;
   }
   if (backendUrl.startsWith("http://")) {
     const wsUrl = backendUrl.replace("http://", "ws://");
-    console.log("✅ WebSocket URL (HTTP→WS):", wsUrl);
     return wsUrl;
   }
-  console.log("✅ WebSocket URL (default):", backendUrl);
   return backendUrl;
 })();
 

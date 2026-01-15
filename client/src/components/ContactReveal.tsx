@@ -81,7 +81,6 @@ export const ContactReveal = ({
       }
 
       setError(errorMessage);
-      console.error(err);
     } finally {
       setIsLoading(false);
     }

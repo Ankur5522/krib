@@ -80,7 +80,7 @@ export const MessageItem = ({ message, theme }: MessageItemProps) => {
       addReportedMessage(message.id);
       setIsReported(true);
     } catch (error: unknown) {
-      console.error("Failed to report message:", error);
+      // Silently handle error
     } finally {
       setIsReporting(false);
     }
