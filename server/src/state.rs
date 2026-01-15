@@ -137,6 +137,19 @@ impl AppState {
         }
     }
 
+    /// Delete a specific message by ID
+    pub async fn delete_message(&self, id: &str) -> Result<()> {
+        let message_key = format!("{}{}", MESSAGE_KEY_PREFIX, id);
+        
+        // Delete the message from Redis
+        self.redis.del(&message_key).await?;
+        
+        // Remove from sorted set
+        self.redis.zrem(MESSAGES_KEY, id).await?;
+        
+        Ok(())
+    }
+
     /// Clean up old messages (older than TTL)
     #[allow(dead_code)]
     pub async fn cleanup_old_messages(&self) -> Result<()> {

@@ -53,7 +53,7 @@ function App() {
     message_count: number;
   } | null>(null);
   const [showCityStatsPopup, setShowCityStatsPopup] = useState(false);
-  
+
   // Handler for accepting policy
   const handleAcceptPolicy = () => {
     setPolicyAccepted(true);
@@ -82,6 +82,8 @@ function App() {
         accentSoft: "bg-zinc-800",
         input: "bg-[#1C1C1E] border-zinc-800 text-white placeholder-zinc-500",
         glow: "shadow-[0_0_30px_rgba(255,255,255,0.03)]",
+        scrollbarWidth: "thin",
+        scrollbarColor: "#3f3f46 transparent",
       }
     : {
         bg: "bg-[#F5F5F7]",
@@ -98,6 +100,8 @@ function App() {
         accentSoft: "bg-zinc-100",
         input: "bg-zinc-100 border-zinc-200 text-black placeholder-zinc-400",
         glow: "shadow-lg",
+        scrollbarWidth: "thin",
+        scrollbarColor: "#d4d4d8 transparent",
       };
 
   // Check localStorage first, only request location if not found
@@ -424,25 +428,46 @@ function App() {
 
   return (
     <div
-      className={`min-h-screen ${theme.bg} ${theme.text} font-[-apple-system,BlinkMacSystemFont,'SF_Pro_Display','SF_Pro_Text',sans-serif] transition-colors duration-300`}
+      className={`min-h-screen ${theme.bg} ${theme.text} font-[-apple-system,BlinkMacSystemFont,'SF_Pro_Display','SF_Pro_Text',sans-serif] transition-colors duration-300 flex flex-col`}
     >
-      {/* Always visible header */}
-      <header
-        className={`fixed top-0 left-0 right-0 z-40 ${theme.bgSecondary} border-b ${theme.border} backdrop-blur-xl`}
-      >
-        <div className="w-full lg:max-w-[60%] mx-auto px-4 py-3">
-          <div className="flex items-center justify-start">
-            <div className="flex items-center gap-2">
-              <div
-                className={`w-8 h-8 rounded-xl ${theme.accent} flex items-center justify-center`}
-              >
-                <MessageCircle className="w-4 h-4" />
-              </div>
-              <span className="text-xl font-semibold tracking-tight">Krib</span>
-            </div>
-          </div>
-        </div>
-      </header>
+      {/* Global Scrollbar Styles */}
+      <style>
+        {`
+          /* Sleek scrollbar for light mode */
+          ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+          }
+          ::-webkit-scrollbar-track {
+            background: transparent;
+          }
+          ::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.4);
+            border-radius: 3px;
+          }
+          ::-webkit-scrollbar-thumb:hover {
+            background: rgba(148, 163, 184, 0.6);
+          }
+          
+          /* Sleek scrollbar for dark mode */
+          .dark ::-webkit-scrollbar-thumb {
+            background: rgba(71, 85, 105, 0.4);
+          }
+          .dark ::-webkit-scrollbar-thumb:hover {
+            background: rgba(71, 85, 105, 0.6);
+          }
+          
+          /* Firefox scrollbar */
+          * {
+            scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
+            scrollbar-width: thin;
+          }
+          
+          .dark * {
+            scrollbar-color: rgba(71, 85, 105, 0.4) transparent;
+          }
+        `}
+      </style>
 
       {!policyAccepted && (
         <PolicyDialog
@@ -649,98 +674,7 @@ function App() {
         </div>
       )}
 
-      {/* Sticky Header */}
-      {policyAccepted ? (
-        <header
-          className={`fixed top-0 left-0 right-0 z-50 ${theme.bgSecondary} border-b ${theme.border} backdrop-blur-xl`}
-        >
-          <div className="w-full lg:max-w-[60%] mx-auto px-4 py-3">
-            {/* Top Row - Logo & Theme */}
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <div
-                  className={`w-8 h-8 rounded-xl ${theme.accent} flex items-center justify-center`}
-                >
-                  <MessageCircle className="w-4 h-4" />
-                </div>
-                <span className="text-xl font-semibold tracking-tight">
-                  Krib
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                {/* City Display */}
-                <button
-                  onClick={() => setShowCitySearch(true)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${theme.accentSoft} text-xs font-medium hover:opacity-80 transition-all`}
-                  title="Click to change city"
-                >
-                  <MapPin className="w-3 h-3" />
-                  <span>{city || "Select City"}</span>
-                </button>
-
-                {/* Daily Stats Display */}
-                {dailyStats && (
-                  <button
-                    onClick={() => setShowCityStatsPopup(true)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${theme.accentSoft} text-xs font-medium hover:opacity-80 transition-all lg:hidden`}
-                    title="Click to view city stats"
-                  >
-                    <span title="Unique visitors today">
-                      👥 {dailyStats.unique_ips}
-                    </span>
-                    <span>•</span>
-                    <span title="Messages posted today">
-                      💬 {dailyStats.message_count}
-                    </span>
-                  </button>
-                )}
-
-                {/* Daily Stats Display - Desktop */}
-                {dailyStats && (
-                  <div
-                    className={`hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-full ${theme.accentSoft} text-xs font-medium`}
-                  >
-                    <span title="Unique visitors today">
-                      👥 {dailyStats.unique_ips}
-                    </span>
-                    <span>•</span>
-                    <span title="Messages posted today">
-                      💬 {dailyStats.message_count}
-                    </span>
-                  </div>
-                )}
-
-                {/* Connection Status */}
-                {readyState !== ReadyState.OPEN && (
-                  <div
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${theme.accentSoft} text-xs font-medium`}
-                  >
-                    <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
-                    <span>Connecting...</span>
-                  </div>
-                )}
-
-                {/* Theme Toggle */}
-                <button
-                  onClick={() => setDarkMode(!darkMode)}
-                  className={`p-2 rounded-full ${theme.accentSoft} transition-all`}
-                >
-                  {darkMode ? (
-                    <Sun className="w-4 h-4" />
-                  ) : (
-                    <Moon className="w-4 h-4" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* Tab Selector */}
-            <Header theme={theme} />
-          </div>
-        </header>
-      ) : null}
-
-{/* Mobile City Stats Popup */}
+      {/* Mobile City Stats Popup */}
       {policyAccepted && showCityStatsPopup && (
         <>
           <div
@@ -756,31 +690,127 @@ function App() {
         </>
       )}
 
-      {/* Desktop City Stats Sidebar + Main Content */}
+      {/* Main Layout - Flex Row for Desktop, Column for Mobile */}
       {policyAccepted ? (
-        <div className="flex">
-          {/* Desktop Sidebar */}
-          <CityStats theme={theme} isMobile={false} />
-          
-          {/* Main Content */}
-          <main className="flex-1 pt-32 px-4 w-full pb-0">
-            <MessageList
-              theme={theme}
-              darkMode={darkMode}
-              isLoading={isLoadingMessages}
-            />
-          </main>
-        </div>
-      ) : null}
+        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
+          {/* Desktop City Stats Modal - Floating on Left, hidden on smaller screens */}
+          <div className="absolute left-4 top-1/2 transform -translate-y-1/2 hidden xl:block z-40">
+            <CityStats theme={theme} isMobile={false} />
+          </div>
 
-      {/* Bottom Input Bar */}
-      {policyAccepted ? (
-        <InputArea
-          onSendMessage={handleSendMessage}
-          error={postError}
-          theme={theme}
-          darkMode={darkMode}
-        />
+          {/* Main Content Column - No padding adjustment needed */}
+          <div className="flex-1 flex flex-col overflow-hidden w-full">
+            {/* Header - Sticky */}
+            <header
+              className={`${theme.bgSecondary} border-b ${theme.border} backdrop-blur-xl flex-shrink-0`}
+            >
+              <div className="w-full lg:max-w-[60%] mx-auto px-4 py-3">
+                {/* Top Row - Logo & Theme */}
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className={`w-8 h-8 rounded-xl ${theme.accent} flex items-center justify-center`}
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                    </div>
+                    <span className="text-xl font-semibold tracking-tight">
+                      Krib
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {/* City Display */}
+                    <button
+                      onClick={() => setShowCitySearch(true)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${theme.accentSoft} text-xs font-medium hover:opacity-80 transition-all`}
+                      title="Click to change city"
+                    >
+                      <MapPin className="w-3 h-3" />
+                      <span>{city || "Select City"}</span>
+                    </button>
+
+                    {/* Daily Stats Display */}
+                    {dailyStats && (
+                      <button
+                        onClick={() => setShowCityStatsPopup(true)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${theme.accentSoft} text-xs font-medium hover:opacity-80 transition-all lg:hidden`}
+                        title="Click to view city stats"
+                      >
+                        <span title="Unique visitors today">
+                          👥 {dailyStats.unique_ips}
+                        </span>
+                        <span>•</span>
+                        <span title="Messages posted today">
+                          💬 {dailyStats.message_count}
+                        </span>
+                      </button>
+                    )}
+
+                    {/* Daily Stats Display - Desktop */}
+                    {dailyStats && (
+                      <div
+                        className={`hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-full ${theme.accentSoft} text-xs font-medium`}
+                      >
+                        <span title="Unique visitors today">
+                          👥 {dailyStats.unique_ips}
+                        </span>
+                        <span>•</span>
+                        <span title="Messages posted today">
+                          💬 {dailyStats.message_count}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Connection Status */}
+                    {readyState !== ReadyState.OPEN && (
+                      <div
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${theme.accentSoft} text-xs font-medium`}
+                      >
+                        <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+                        <span>Connecting...</span>
+                      </div>
+                    )}
+
+                    {/* Theme Toggle */}
+                    <button
+                      onClick={() => setDarkMode(!darkMode)}
+                      className={`p-2 rounded-full ${theme.accentSoft} transition-all`}
+                    >
+                      {darkMode ? (
+                        <Sun className="w-4 h-4" />
+                      ) : (
+                        <Moon className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </header>
+
+            {/* Tab Selector */}
+            <div className="w-full lg:max-w-[60%] mx-auto px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+              <Header theme={theme} />
+            </div>
+
+            {/* Message List - Flexible - Narrower when stats are hidden */}
+            <div className="flex-1 overflow-y-auto w-full lg:max-w-[45%] xl:max-w-[60%] mx-auto px-4">
+              <MessageList
+                theme={theme}
+                darkMode={darkMode}
+                isLoading={isLoadingMessages}
+              />
+            </div>
+
+            {/* Bottom Input Bar - Fixed Height */}
+            <div className="shrink-0">
+              <InputArea
+                onSendMessage={handleSendMessage}
+                error={postError}
+                theme={theme}
+                darkMode={darkMode}
+              />
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );

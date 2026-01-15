@@ -121,8 +121,9 @@ pub async fn burst_protection_middleware(
     let is_get_request = method == axum::http::Method::GET;
 
     if let Some(ctx) = security_ctx {
-        // Check governor-based IP rate limiting (50 requests per minute) - but skip for stats
-        if !is_stats_endpoint && !state.governor_limiter.check_ip_rate_limit(&ctx.ip_address) {
+        // Check governor-based IP rate limiting (50 requests per minute)
+        // Skip for stats endpoints and GET requests (read-only, harmless)
+        if !is_stats_endpoint && !is_get_request && !state.governor_limiter.check_ip_rate_limit(&ctx.ip_address) {
             eprintln!("🚫 IP rate limit exceeded for: {}", ctx.ip_address);
             return (
                 StatusCode::TOO_MANY_REQUESTS,
@@ -162,8 +163,9 @@ pub async fn burst_protection_middleware(
             }
         }
 
-        // Check burst protection rate limit (20 requests in 2 seconds) - skip for stats
-        if !is_stats_endpoint {
+        // Check burst protection rate limit (20 requests in 2 seconds)
+        // Skip for stats endpoints and GET requests (read-only, harmless)
+        if !is_stats_endpoint && !is_get_request {
             match state.rate_limiter
                 .check_rate_limit(&ctx.composite_key, RateLimitType::BurstProtection)
                 .await

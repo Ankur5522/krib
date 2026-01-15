@@ -107,6 +107,12 @@ impl RedisClient {
         conn.zrembyscore(key, min, max).await
     }
 
+    /// Remove a member from a sorted set
+    pub async fn zrem(&self, key: &str, member: &str) -> Result<i64, RedisError> {
+        let mut conn = self.manager.clone();
+        conn.zrem(key, member).await
+    }
+
     /// Count elements in a sorted set within a score range
     pub async fn zcount(&self, key: &str, min: f64, max: f64) -> Result<i64, RedisError> {
         let mut conn = self.manager.clone();

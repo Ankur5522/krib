@@ -12,6 +12,11 @@ export interface Theme {
   accent: string;
   bgCard: string;
   glow: string;
+  scrollbarWidth: string;
+  scrollbarColor: string;
+  bgSecondary: string;
+  bg: string;
+  bgTertiary: string;
 }
 
 interface MessageListProps {

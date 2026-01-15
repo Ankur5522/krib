@@ -190,9 +190,6 @@ pub async fn post_message(
         eprintln!("Failed to set IP reputation cooldown: {}", e);
     }
 
-    // Store location before it gets moved
-    let location = request.location.clone();
-
     let message = ChatMessage::new(
         request.browser_id,
         request.message,
@@ -230,16 +227,6 @@ pub async fn post_message(
     // Set expiration to 7 days
     let _ = state.redis.expire(&message_count_key, 604800).await;
 
-    // Track city-wise views if location is provided
-    if let Some(location) = location {
-        let city_views_key = format!("stats:city_views:{}:{}", location, today);
-        if let Err(e) = state.redis.incr(&city_views_key).await {
-            eprintln!("Failed to increment city views for {}: {}", location, e);
-        }
-        // Set expiration to 7 days
-        let _ = state.redis.expire(&city_views_key, 604800).await;
-    }
-
     Ok(Json(message))
 }
 
@@ -247,9 +234,39 @@ use std::collections::HashMap;
 
 pub async fn get_messages(
     State(state): State<AppState>,
+    Extension(security_ctx): Extension<SecurityContext>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Json<Vec<ChatMessage>> {
     let location_filter = params.get("location");
+    
+    // Track unique daily visitors per city (not just page views)
+    if let Some(city) = location_filter {
+        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        
+        // Use a Redis set to track unique visitors per city per day
+        // Key format: stats:city_visitors:CITY:DATE
+        let city_visitors_key = format!("stats:city_visitors:{}:{}", city, today);
+        
+        // Add the fingerprint to the set (returns 1 if new, 0 if already exists)
+        match state.redis.sadd(&city_visitors_key, &security_ctx.fingerprint).await {
+            Ok(is_new) => {
+                // Only increment if this is a new visitor today
+                if is_new > 0 {
+                    let city_views_key = format!("stats:city_views:{}:{}", city, today);
+                    if let Err(e) = state.redis.incr(&city_views_key).await {
+                        eprintln!("Failed to increment city views for {}: {}", city, e);
+                    }
+                    // Set expiry to 7 days for both keys
+                    let _ = state.redis.expire(&city_views_key, 604800).await;
+                }
+                // Always set expiry on the visitors set
+                let _ = state.redis.expire(&city_visitors_key, 604800).await;
+            }
+            Err(e) => {
+                eprintln!("Failed to track visitor for {}: {}", city, e);
+            }
+        }
+    }
     
     let messages = state.get_messages()
         .await
@@ -415,6 +432,15 @@ pub async fn report_message(
     // Set expiration on reports (forgive after 7 days)
     let _ = state.redis.expire(&report_key, 604800).await;
 
+    // If 5 or more reports, delete the message
+    if report_count >= 5 {
+        if let Err(e) = state.delete_message(&request.message_id).await {
+            eprintln!("Failed to delete reported message {}: {}", request.message_id, e);
+        } else {
+            eprintln!("Message {} deleted after {} reports", request.message_id, report_count);
+        }
+    }
+
     // If 3 or more reports, shadowban the fingerprint permanently
     if report_count >= 3 {
         // Create a composite key for the reported user (we use fingerprint as basis)
@@ -514,8 +540,8 @@ pub async fn get_city_stats(
     
     // List of major cities to track
     let major_cities = vec![
-        "Bangalore", "Hyderabad", "Pune", "Chennai", "Kolkata",
-        "Trivandrum", "Delhi", "Noida", "Gurgaon",
+        "Bengaluru", "Hyderabad", "Pune", "Chennai", "Kolkata",
+        "Thiruvananthapuram", "Delhi", "Noida", "Gurgaon",
     ];
     
     let mut city_stats = Vec::new();

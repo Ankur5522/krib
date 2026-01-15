@@ -73,12 +73,8 @@ export const InputArea = ({
   const isOverLimit = content.length > 280;
 
   return (
-    <div className={`fixed bottom-0 left-0 right-0 z-30`}>
-      <div
-        className={`${darkMode ? "bg-[#141414]" : "bg-white"} border-t ${
-          theme.border
-        }`}
-      >
+    <div className={`w-full border-t ${theme.border}`}>
+      <div className={`${darkMode ? "bg-[#141414]" : "bg-white"}`}>
         <div className="w-full lg:max-w-[60%] mx-auto px-4 py-4">
           {timeLeft > 0 && (
             <div className="mb-2 flex items-center gap-2 px-3 py-2 bg-blue-100/90 rounded-lg text-xs text-blue-700">
