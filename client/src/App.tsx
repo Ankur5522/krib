@@ -49,7 +49,7 @@ function App() {
     return localStorage.getItem("policyAccepted") === "true";
   });
   const [dailyStats, setDailyStats] = useState<{
-    unique_ips: number;
+    unique_visitors: number;
     message_count: number;
   } | null>(null);
   const [showCityStatsPopup, setShowCityStatsPopup] = useState(false);
@@ -158,7 +158,7 @@ function App() {
   const fetchDailyStats = async () => {
     try {
       const data = await apiGet<{
-        unique_ips: number;
+        unique_visitors: number;
         message_count: number;
       }>("/api/stats/daily");
       setDailyStats(data);
@@ -171,12 +171,12 @@ function App() {
     try {
       // Check if we've already tracked this visitor today
       const today = new Date().toISOString().split("T")[0];
-      const lastTrackedDate = localStorage.getItem("kirb_visitor_tracked_date");
+      const lastTrackedDate = localStorage.getItem("kirb_visitor_tracked_v2");
 
       // Only track if we haven't tracked today yet
       if (lastTrackedDate !== today) {
         await apiPost("/api/track-visitor", {});
-        localStorage.setItem("kirb_visitor_tracked_date", today);
+        localStorage.setItem("kirb_visitor_tracked_v2", today);
         console.log("Visitor tracked for today");
       }
     } catch (e) {
@@ -737,7 +737,7 @@ function App() {
                         title="Click to view city stats"
                       >
                         <span title="Unique visitors today">
-                          👥 {dailyStats.unique_ips}
+                          👥 {dailyStats.unique_visitors}
                         </span>
                         <span>•</span>
                         <span title="Messages posted today">
@@ -752,7 +752,7 @@ function App() {
                         className={`hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-full ${theme.accentSoft} text-xs font-medium`}
                       >
                         <span title="Unique visitors today">
-                          👥 {dailyStats.unique_ips}
+                          👥 {dailyStats.unique_visitors}
                         </span>
                         <span>•</span>
                         <span title="Messages posted today">

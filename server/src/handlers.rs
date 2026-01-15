@@ -484,16 +484,16 @@ pub async fn track_visitor(
     // Get today's date in YYYY-MM-DD format (UTC)
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
     
-    // Track unique IPs (using a Redis set for today)
-    let unique_ips_key = format!("stats:unique_ips:{}", today);
-    if let Err(e) = state.redis.sadd(&unique_ips_key, &security_ctx.ip_address).await {
-        eprintln!("Failed to track visitor IP: {}", e);
+    // Track unique visitors by fingerprint (using a Redis set for today)
+    let unique_visitors_key = format!("stats:unique_visitors:{}", today);
+    if let Err(e) = state.redis.sadd(&unique_visitors_key, &security_ctx.fingerprint).await {
+        eprintln!("Failed to track visitor fingerprint: {}", e);
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
     
     // Set expiration to 7 days (to clean up old stats)
-    if let Err(e) = state.redis.expire(&unique_ips_key, 604800).await {
-        eprintln!("Failed to set expiration on unique IPs: {}", e);
+    if let Err(e) = state.redis.expire(&unique_visitors_key, 604800).await {
+        eprintln!("Failed to set expiration on unique visitors: {}", e);
     }
     
     Ok(Json(json!({
@@ -502,17 +502,17 @@ pub async fn track_visitor(
     })))
 }
 
-/// Get daily statistics (unique IPs and message count for the day)
+/// Get daily statistics (unique visitors and message count for the day)
 pub async fn get_daily_stats(
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Get today's date in YYYY-MM-DD format (UTC)
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
     
-    // Get unique IPs for today
-    let unique_ips_key = format!("stats:unique_ips:{}", today);
-    let unique_ips = state.redis
-        .scard(&unique_ips_key)
+    // Get unique visitors for today (by fingerprint)
+    let unique_visitors_key = format!("stats:unique_visitors:{}", today);
+    let unique_visitors = state.redis
+        .scard(&unique_visitors_key)
         .await
         .unwrap_or(0) as u64;
     
@@ -527,7 +527,7 @@ pub async fn get_daily_stats(
         .unwrap_or(0);
     
     Ok(Json(json!({
-        "unique_ips": unique_ips,
+        "unique_visitors": unique_visitors,
         "message_count": message_count,
     })))
 }

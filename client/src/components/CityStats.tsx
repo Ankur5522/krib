@@ -215,12 +215,19 @@ export function CityStats({
             })}
           </div>
           {lastUpdated && !isMobile && (
-            <p
-              className={`text-xs ${theme.textMuted} text-center pt-2 border-t ${theme.border}`}
-            >
-              Updated {Math.round((Date.now() - lastUpdated.getTime()) / 1000)}s
-              ago
-            </p>
+            <>
+              <p
+                className={`text-xs ${theme.textMuted} text-center pt-2 border-t ${theme.border}`}
+              >
+                Updated{" "}
+                {Math.round((Date.now() - lastUpdated.getTime()) / 1000)}s ago
+              </p>
+              <p
+                className={`text-[10px] ${theme.textMuted} text-center opacity-60 mt-1`}
+              >
+                Based on unique browser visitors per day
+              </p>
+            </>
           )}
         </>
       )}
