@@ -5,6 +5,7 @@ import { Header } from "./components/Header";
 import { MessageList } from "./components/MessageList";
 import { InputArea } from "./components/InputArea";
 import PolicyDialog from "./components/PolicyDialog";
+import { CityStats } from "./components/CityStats";
 import { useChatStore } from "./store/useChatStore";
 import { getDeviceId } from "./lib/utils";
 import { apiGet, apiPost, WS_BASE_URL } from "./lib/api";
@@ -51,6 +52,8 @@ function App() {
     unique_ips: number;
     message_count: number;
   } | null>(null);
+  const [showCityStatsPopup, setShowCityStatsPopup] = useState(false);
+  
   // Handler for accepting policy
   const handleAcceptPolicy = () => {
     setPolicyAccepted(true);
@@ -677,8 +680,25 @@ function App() {
 
                 {/* Daily Stats Display */}
                 {dailyStats && (
+                  <button
+                    onClick={() => setShowCityStatsPopup(true)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${theme.accentSoft} text-xs font-medium hover:opacity-80 transition-all lg:hidden`}
+                    title="Click to view city stats"
+                  >
+                    <span title="Unique visitors today">
+                      👥 {dailyStats.unique_ips}
+                    </span>
+                    <span>•</span>
+                    <span title="Messages posted today">
+                      💬 {dailyStats.message_count}
+                    </span>
+                  </button>
+                )}
+
+                {/* Daily Stats Display - Desktop */}
+                {dailyStats && (
                   <div
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${theme.accentSoft} text-xs font-medium`}
+                    className={`hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-full ${theme.accentSoft} text-xs font-medium`}
                   >
                     <span title="Unique visitors today">
                       👥 {dailyStats.unique_ips}
@@ -720,15 +740,37 @@ function App() {
         </header>
       ) : null}
 
-      {/* Message Stream */}
-      {policyAccepted ? (
-        <main className="pt-32 px-4 w-full lg:max-w-[60%] mx-auto pb-0">
-          <MessageList
-            theme={theme}
-            darkMode={darkMode}
-            isLoading={isLoadingMessages}
+{/* Mobile City Stats Popup */}
+      {policyAccepted && showCityStatsPopup && (
+        <>
+          <div
+            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
+            onClick={() => setShowCityStatsPopup(false)}
           />
-        </main>
+          <CityStats
+            theme={theme}
+            isOpen={showCityStatsPopup}
+            onClose={() => setShowCityStatsPopup(false)}
+            isMobile={true}
+          />
+        </>
+      )}
+
+      {/* Desktop City Stats Sidebar + Main Content */}
+      {policyAccepted ? (
+        <div className="flex">
+          {/* Desktop Sidebar */}
+          <CityStats theme={theme} isMobile={false} />
+          
+          {/* Main Content */}
+          <main className="flex-1 pt-32 px-4 w-full pb-0">
+            <MessageList
+              theme={theme}
+              darkMode={darkMode}
+              isLoading={isLoadingMessages}
+            />
+          </main>
+        </div>
       ) : null}
 
       {/* Bottom Input Bar */}

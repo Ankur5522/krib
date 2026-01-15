@@ -112,10 +112,17 @@ pub async fn burst_protection_middleware(
     // Get security context from request extensions
     let security_ctx = req.extensions().get::<SecurityContext>();
     let uri_path = req.uri().path().to_string();
+    let method = req.method().clone();
+
+    // Skip rate limiting for read-only stats endpoints
+    let is_stats_endpoint = uri_path.starts_with("/api/stats/") 
+        || uri_path == "/health"
+        || uri_path == "/api/cooldown";
+    let is_get_request = method == axum::http::Method::GET;
 
     if let Some(ctx) = security_ctx {
-        // Check governor-based IP rate limiting (50 requests per minute)
-        if !state.governor_limiter.check_ip_rate_limit(&ctx.ip_address) {
+        // Check governor-based IP rate limiting (50 requests per minute) - but skip for stats
+        if !is_stats_endpoint && !state.governor_limiter.check_ip_rate_limit(&ctx.ip_address) {
             eprintln!("🚫 IP rate limit exceeded for: {}", ctx.ip_address);
             return (
                 StatusCode::TOO_MANY_REQUESTS,
@@ -123,57 +130,61 @@ pub async fn burst_protection_middleware(
             ).into_response();
         }
 
-        // Check burst profiler for bot detection
-        match state.burst_profiler.check_burst(&ctx.composite_key, &uri_path).await {
-            Ok(true) => {
-                // Bot detected - shadowban immediately
-                eprintln!("🤖 Bot detected via burst profiler: {}", ctx.composite_key);
-                
-                if let Err(e) = state.shadowban_manager.shadowban(
-                    &ctx.composite_key,
-                    Some("Bot detected - burst pattern"),
-                    Some(86400), // 24 hour ban
-                ).await {
-                    eprintln!("Failed to shadowban bot: {}", e);
-                }
+        // Check burst profiler for bot detection - skip for GET requests (harmless reads)
+        if !is_get_request {
+            match state.burst_profiler.check_burst(&ctx.composite_key, &uri_path).await {
+                Ok(true) => {
+                    // Bot detected - shadowban immediately
+                    eprintln!("🤖 Bot detected via burst profiler: {}", ctx.composite_key);
+                    
+                    if let Err(e) = state.shadowban_manager.shadowban(
+                        &ctx.composite_key,
+                        Some("Bot detected - burst pattern"),
+                        Some(86400), // 24 hour ban
+                    ).await {
+                        eprintln!("Failed to shadowban bot: {}", e);
+                    }
 
-                // Also block the IP
-                if let Err(e) = state.rate_limiter.block_ip(&ctx.ip_address, 1800).await {
-                    eprintln!("Failed to block IP: {}", e);
-                }
-
-                return (
-                    StatusCode::TOO_MANY_REQUESTS,
-                    "Suspicious activity detected",
-                ).into_response();
-            }
-            Err(e) => {
-                eprintln!("Error checking burst profiler: {}", e);
-            }
-            _ => {}
-        }
-
-        // Check burst protection rate limit (20 requests in 2 seconds)
-        match state.rate_limiter
-            .check_rate_limit(&ctx.composite_key, RateLimitType::BurstProtection)
-            .await
-        {
-            Ok(result) => {
-                if !result.allowed {
-                    // Block IP for 30 minutes
+                    // Also block the IP
                     if let Err(e) = state.rate_limiter.block_ip(&ctx.ip_address, 1800).await {
                         eprintln!("Failed to block IP: {}", e);
                     }
 
                     return (
                         StatusCode::TOO_MANY_REQUESTS,
-                        "Too many requests - IP blocked for 30 minutes",
+                        "Suspicious activity detected",
                     ).into_response();
                 }
+                Err(e) => {
+                    eprintln!("Error checking burst profiler: {}", e);
+                }
+                _ => {}
             }
-            Err(e) => {
-                eprintln!("Error checking burst protection: {}", e);
-                // Continue anyway
+        }
+
+        // Check burst protection rate limit (20 requests in 2 seconds) - skip for stats
+        if !is_stats_endpoint {
+            match state.rate_limiter
+                .check_rate_limit(&ctx.composite_key, RateLimitType::BurstProtection)
+                .await
+            {
+                Ok(result) => {
+                    if !result.allowed {
+                        // Block IP for 30 minutes
+                        if let Err(e) = state.rate_limiter.block_ip(&ctx.ip_address, 1800).await {
+                            eprintln!("Failed to block IP: {}", e);
+                        }
+
+                        return (
+                            StatusCode::TOO_MANY_REQUESTS,
+                            "Too many requests - IP blocked for 30 minutes",
+                        ).into_response();
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Error checking burst protection: {}", e);
+                    // Continue anyway
+                }
             }
         }
     }

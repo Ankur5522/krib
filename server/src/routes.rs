@@ -10,7 +10,9 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/cooldown", get(handlers::get_cooldown))
         .route("/api/report", post(handlers::report_message))
         .route("/api/track-visitor", post(handlers::track_visitor))
+        // Stats endpoints - use only burst protection, not rate limiting
         .route("/api/stats/daily", get(handlers::get_daily_stats))
+        .route("/api/stats/cities", get(handlers::get_city_stats))
         .route("/health", get(handlers::health_check))
         .layer(middleware::from_fn_with_state(state.clone(), burst_protection_middleware))
         .layer(middleware::from_fn_with_state(state.clone(), security_middleware))

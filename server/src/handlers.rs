@@ -190,6 +190,9 @@ pub async fn post_message(
         eprintln!("Failed to set IP reputation cooldown: {}", e);
     }
 
+    // Store location before it gets moved
+    let location = request.location.clone();
+
     let message = ChatMessage::new(
         request.browser_id,
         request.message,
@@ -226,6 +229,16 @@ pub async fn post_message(
     }
     // Set expiration to 7 days
     let _ = state.redis.expire(&message_count_key, 604800).await;
+
+    // Track city-wise views if location is provided
+    if let Some(location) = location {
+        let city_views_key = format!("stats:city_views:{}:{}", location, today);
+        if let Err(e) = state.redis.incr(&city_views_key).await {
+            eprintln!("Failed to increment city views for {}: {}", location, e);
+        }
+        // Set expiration to 7 days
+        let _ = state.redis.expire(&city_views_key, 604800).await;
+    }
 
     Ok(Json(message))
 }
@@ -491,4 +504,49 @@ pub async fn get_daily_stats(
         "unique_ips": unique_ips,
         "message_count": message_count,
     })))
+}
+/// Get city-wise daily views
+/// Returns average daily views for major cities
+pub async fn get_city_stats(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    
+    // List of major cities to track
+    let major_cities = vec![
+        "Bangalore", "Hyderabad", "Pune", "Chennai", "Kolkata",
+        "Trivandrum", "Delhi", "Noida", "Gurgaon",
+    ];
+    
+    let mut city_stats = Vec::new();
+    
+    for city in major_cities {
+        // Track views per city per day
+        let city_views_key = format!("stats:city_views:{}:{}", city, today);
+        let views: u64 = state.redis
+            .get(&city_views_key)
+            .await
+            .ok()
+            .flatten()
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(0);
+        
+        // Calculate daily average (for now, just today's count)
+        // In future, can calculate average over last 7 days
+        city_stats.push(json!({
+            "city": city,
+            "views": views,
+            "daily_average": views,
+        }));
+    }
+    
+    // Sort by views descending
+    let mut city_stats_vec: Vec<serde_json::Value> = city_stats;
+    city_stats_vec.sort_by(|a, b| {
+        let views_a = a.get("views").and_then(|v| v.as_u64()).unwrap_or(0);
+        let views_b = b.get("views").and_then(|v| v.as_u64()).unwrap_or(0);
+        views_b.cmp(&views_a)
+    });
+    
+    Ok(Json(serde_json::json!(city_stats_vec)))
 }

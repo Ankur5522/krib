@@ -70,7 +70,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .layer(TimeoutLayer::new(Duration::from_secs(30))) // 30 second timeout
         .layer(cors);
 
-    let port = env::var("PORT").unwrap_or_else(|_| "8000".to_string());
+    let port = env::var("PORT").unwrap_or_else(|_| "3001".to_string());
     let addr = format!("0.0.0.0:{}", port);
     
     println!("🚀 Server running on http://0.0.0.0:{}", port);
