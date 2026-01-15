@@ -27,6 +27,43 @@ export const InputArea = ({
   const [rows, setRows] = useState(1);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Extract phone number from message content
+  const extractPhoneNumber = (
+    text: string
+  ): { cleanText: string; phone: string | null } => {
+    // Match Indian phone numbers: 10 digits optionally starting with +91, 91, or 0
+    const phoneRegex = /(?:\+91|91|0)?[\s-]?[6-9]\d{9}/g;
+    const matches = text.match(phoneRegex);
+
+    if (matches && matches.length > 0) {
+      // Take the first phone number found
+      let extractedPhone = matches[0].replace(/[\s-]/g, "");
+      // Remove country code prefix if present
+      extractedPhone = extractedPhone.replace(/^(\+91|91|0)/, "");
+
+      // Remove the phone number from the text
+      const cleanText = text.replace(phoneRegex, "").trim();
+
+      return { cleanText, phone: extractedPhone };
+    }
+
+    return { cleanText: text, phone: null };
+  };
+
+  // Handle content changes and auto-extract phone numbers
+  const handleContentChange = (text: string) => {
+    const { cleanText, phone: extractedPhone } = extractPhoneNumber(text);
+
+    if (extractedPhone) {
+      // Phone number found - extract it
+      setContent(cleanText);
+      setPhone(extractedPhone);
+    } else {
+      // No phone number found - just update content
+      setContent(text);
+    }
+  };
+
   // Cooldown timer effect
   useEffect(() => {
     const timer = setInterval(() => {
@@ -50,6 +87,7 @@ export const InputArea = ({
     e.preventDefault();
     if (timeLeft > 0) return;
     if (!content.trim()) return;
+    if (!phone.trim()) return; // Phone is now mandatory
 
     onSendMessage(content, phone, activeTab);
     markPostSent();
@@ -70,7 +108,7 @@ export const InputArea = ({
     }
   };
 
-  const isOverLimit = content.length > 280;
+  const isOverLimit = content.length > 500;
 
   return (
     <div className={`w-full border-t ${theme.border}`}>
@@ -93,9 +131,10 @@ export const InputArea = ({
             <div className="block lg:hidden mb-2">
               <input
                 type="tel"
-                placeholder="Phone (optional)"
+                placeholder="Phone (required) *"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
+                required
                 className={`w-full bg-transparent text-sm focus:outline-none border rounded-lg px-3 py-2 ${
                   darkMode
                     ? "bg-[#252525] border-zinc-700 text-white placeholder-zinc-500"
@@ -113,9 +152,10 @@ export const InputArea = ({
               {/* Phone Input - Desktop only, inline */}
               <input
                 type="tel"
-                placeholder="Phone"
+                placeholder="Phone *"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
+                required
                 className={`hidden lg:block w-24 bg-transparent text-xs focus:outline-none shrink-0 ${
                   darkMode
                     ? "text-white placeholder-zinc-500"
@@ -136,9 +176,9 @@ export const InputArea = ({
                     : "Describe what you're looking for..."
                 }
                 value={content}
-                onChange={(e) => setContent(e.target.value)}
+                onChange={(e) => handleContentChange(e.target.value)}
                 onKeyDown={handleKeyDown}
-                maxLength={280}
+                maxLength={500}
                 rows={rows}
                 className={`flex-1 bg-transparent text-sm focus:outline-none resize-none ${
                   darkMode
@@ -148,11 +188,19 @@ export const InputArea = ({
               />
               <button
                 type="submit"
-                disabled={timeLeft > 0 || !content.trim() || isOverLimit}
+                disabled={
+                  timeLeft > 0 ||
+                  !content.trim() ||
+                  !phone.trim() ||
+                  isOverLimit
+                }
                 className={`p-2 rounded-full ${
                   theme.accent
                 } transition-all hover:opacity-90 shrink-0 ${
-                  timeLeft > 0 || !content.trim() || isOverLimit
+                  timeLeft > 0 ||
+                  !content.trim() ||
+                  !phone.trim() ||
+                  isOverLimit
                     ? "opacity-40"
                     : ""
                 }`}
@@ -162,8 +210,8 @@ export const InputArea = ({
             </div>
             <div className={`text-[10px] ${theme.textMuted} mt-1 px-1`}>
               {rows > 1 ? "Enter to add line • " : ""}
-              Shift+Enter to send • {content.length}/280 • Messages stay for 48
-              hours
+              Shift+Enter to send • {content.length}/500 • Phone number is
+              mandatory • Messages stay for 48 hours
             </div>
           </form>
         </div>

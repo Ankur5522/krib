@@ -1,5 +1,5 @@
 import { TrendingUp, X, Activity } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { apiGet } from "../lib/api";
 import type { Theme } from "./MessageList";
 
@@ -14,6 +14,7 @@ interface CityStatsProps {
   isOpen?: boolean;
   onClose?: () => void;
   isMobile?: boolean;
+  currentCity?: string;
 }
 
 const CACHE_KEY = "krib_city_stats_cache";
@@ -31,24 +32,36 @@ export function CityStats({
   isOpen = true,
   onClose,
   isMobile = false,
+  currentCity,
 }: CityStatsProps) {
   const [cityViews, setCityViews] = useState<CityView[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastFetchTime, setLastFetchTime] = useState<number>(0);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  useEffect(() => {
-    fetchCityStats();
-    // Refresh stats every 30 seconds for live updates
-    const interval = setInterval(fetchCityStats, 30 * 1000);
-    return () => clearInterval(interval);
-  }, []);
+  // Process city views to show current city at top
+  const displayCityViews = () => {
+    if (!currentCity || cityViews.length === 0) return cityViews;
 
-  const fetchCityStats = async () => {
+    // Sort with current city at top, keep the rest sorted by views
+    return [...cityViews].sort((a, b) => {
+      const aIsCurrentCity = a.city.toLowerCase() === currentCity.toLowerCase();
+      const bIsCurrentCity = b.city.toLowerCase() === currentCity.toLowerCase();
+
+      if (aIsCurrentCity) return -1;
+      if (bIsCurrentCity) return 1;
+      return b.views - a.views;
+    });
+  };
+
+  const fetchCityStats = useCallback(async () => {
+    // Include current city in cache key so each city has its own cache
+    const cacheKey = currentCity ? `${CACHE_KEY}_${currentCity}` : CACHE_KEY;
+
     // Check if we have cached data that's still fresh
     const now = Date.now();
     if (now - lastFetchTime < CACHE_DURATION) {
-      const cached = localStorage.getItem(CACHE_KEY);
+      const cached = localStorage.getItem(cacheKey);
       if (cached) {
         try {
           const data = JSON.parse(cached);
@@ -62,14 +75,18 @@ export function CityStats({
     }
 
     try {
-      const data = await apiGet<CityView[]>("/api/stats/cities");
+      // Pass current city as query parameter so backend can include it
+      const url = currentCity
+        ? `/api/stats/cities?current_city=${encodeURIComponent(currentCity)}`
+        : "/api/stats/cities";
+      const data = await apiGet<CityView[]>(url);
       setCityViews(data);
       setLastFetchTime(now);
       setLastUpdated(new Date());
 
-      // Cache the data
+      // Cache the data with city-specific key
       try {
-        localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+        localStorage.setItem(cacheKey, JSON.stringify(data));
       } catch {
         // localStorage might be full, ignore
       }
@@ -77,7 +94,7 @@ export function CityStats({
       console.error("Failed to fetch city stats:", error);
 
       // Try to use stale cache if fetch fails
-      const cached = localStorage.getItem(CACHE_KEY);
+      const cached = localStorage.getItem(cacheKey);
       if (cached) {
         try {
           const data = JSON.parse(cached);
@@ -89,7 +106,16 @@ export function CityStats({
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentCity, lastFetchTime]);
+
+  useEffect(() => {
+    // Reset cache time when city changes to force fresh fetch
+    setLastFetchTime(0);
+    fetchCityStats();
+    // Refresh stats every 30 seconds for live updates
+    const interval = setInterval(fetchCityStats, 30 * 1000);
+    return () => clearInterval(interval);
+  }, [currentCity, fetchCityStats]);
 
   if (isMobile && !isOpen) {
     return null;
@@ -137,38 +163,56 @@ export function CityStats({
       ) : (
         <>
           <div className="space-y-2 flex-1">
-            {cityViews.map((city) => (
-              <div
-                key={city.city}
-                className={`${theme.bgTertiary} rounded-lg p-3 border ${theme.border} hover:border-blue-500 transition-all cursor-default shadow-sm hover:shadow-md`}
-              >
-                <div className={`flex items-center justify-between mb-2`}>
-                  <span className={`text-sm font-bold ${theme.text}`}>
-                    {city.city}
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
-                    <span className={`text-xs font-bold text-emerald-500`}>
-                      {city.views}
-                    </span>
+            {displayCityViews().map((city) => {
+              const isCurrentCity =
+                currentCity &&
+                city.city.toLowerCase() === currentCity.toLowerCase();
+              return (
+                <div
+                  key={city.city}
+                  className={`${theme.bgTertiary} rounded-lg p-3 border ${
+                    isCurrentCity
+                      ? "border-blue-500 ring-1 ring-blue-500/50"
+                      : theme.border
+                  } hover:border-blue-500 transition-all cursor-default shadow-sm hover:shadow-md`}
+                >
+                  <div className={`flex items-center justify-between mb-2`}>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-sm font-bold ${theme.text}`}>
+                        {city.city}
+                      </span>
+                      {isCurrentCity && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500 text-white">
+                          You
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
+                      <span className={`text-xs font-bold text-emerald-500`}>
+                        {city.views}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <p className={`text-xs ${theme.textMuted}`}>
+                      <span className="opacity-70 text-xs">Daily: </span>
+                      <span className="font-semibold">
+                        {city.daily_average}
+                      </span>
+                    </p>
+                    <div className="w-16 h-1.5 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-linear-to-r from-blue-500 to-cyan-500 rounded-full"
+                        style={{
+                          width: `${Math.min(100, (city.views / 50) * 100)}%`,
+                        }}
+                      />
+                    </div>
                   </div>
                 </div>
-                <div className="flex items-center justify-between">
-                  <p className={`text-xs ${theme.textMuted}`}>
-                    <span className="opacity-70 text-xs">Daily: </span>
-                    <span className="font-semibold">{city.daily_average}</span>
-                  </p>
-                  <div className="w-16 h-1.5 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-linear-to-r from-blue-500 to-cyan-500 rounded-full"
-                      style={{
-                        width: `${Math.min(100, (city.views / 50) * 100)}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
           {lastUpdated && !isMobile && (
             <p

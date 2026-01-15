@@ -686,6 +686,7 @@ function App() {
             isOpen={showCityStatsPopup}
             onClose={() => setShowCityStatsPopup(false)}
             isMobile={true}
+            currentCity={city}
           />
         </>
       )}
@@ -695,7 +696,7 @@ function App() {
         <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
           {/* Desktop City Stats Modal - Floating on Left, hidden on smaller screens */}
           <div className="absolute left-4 top-1/2 transform -translate-y-1/2 hidden xl:block z-40">
-            <CityStats theme={theme} isMobile={false} />
+            <CityStats theme={theme} isMobile={false} currentCity={city} />
           </div>
 
           {/* Main Content Column - No padding adjustment needed */}
@@ -721,11 +722,11 @@ function App() {
                     {/* City Display */}
                     <button
                       onClick={() => setShowCitySearch(true)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${theme.accentSoft} text-xs font-medium hover:opacity-80 transition-all`}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${theme.accentSoft} text-xs font-medium hover:opacity-80 transition-all max-w-[120px] sm:max-w-none`}
                       title="Click to change city"
                     >
-                      <MapPin className="w-3 h-3" />
-                      <span>{city || "Select City"}</span>
+                      <MapPin className="w-3 h-3 shrink-0" />
+                      <span className="truncate">{city || "Select City"}</span>
                     </button>
 
                     {/* Daily Stats Display */}

@@ -135,9 +135,8 @@ export const MessageItem = ({ message, theme }: MessageItemProps) => {
       {/* Message Content */}
       <p
         className={`text-base leading-relaxed ${theme.text} mb-3 whitespace-pre-wrap wrap-break-word font-medium`}
-      >
-        {message.content}
-      </p>
+        dangerouslySetInnerHTML={{ __html: message.content }}
+      />
 
       {/* Card Footer */}
       <ContactReveal

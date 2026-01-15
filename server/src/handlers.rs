@@ -535,18 +535,31 @@ pub async fn get_daily_stats(
 /// Returns average daily views for major cities
 pub async fn get_city_stats(
     State(state): State<AppState>,
+    Query(params): Query<HashMap<String, String>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
     
     // List of major cities to track
-    let major_cities = vec![
+    let major_cities_base = vec![
         "Bengaluru", "Hyderabad", "Pune", "Chennai", "Kolkata",
         "Thiruvananthapuram", "Delhi", "Noida", "Gurgaon",
     ];
     
+    let mut cities_to_fetch: Vec<String> = Vec::new();
+    
+    // Add current_city if provided and not already in the list
+    if let Some(current_city) = params.get("current_city") {
+        if !major_cities_base.iter().any(|c| c.eq_ignore_ascii_case(current_city)) {
+            cities_to_fetch.push(current_city.clone());
+        }
+    }
+    
+    // Add major cities
+    cities_to_fetch.extend(major_cities_base.iter().map(|s| s.to_string()));
+    
     let mut city_stats = Vec::new();
     
-    for city in major_cities {
+    for city in cities_to_fetch {
         // Track views per city per day
         let city_views_key = format!("stats:city_views:{}:{}", city, today);
         let views: u64 = state.redis
