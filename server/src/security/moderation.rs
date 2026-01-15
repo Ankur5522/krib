@@ -94,6 +94,59 @@ static ENGLISH_PROFANITY: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(?i)\b(damn|hell|crap|ass|bitch|bastard|piss|fuck|shit|asshole|dick|cock|pussy|whore|slut|cunt)\b").unwrap()
 });
 
+// Leet speak and character substitution map for bypass detection
+static LEET_SPEAK_MAP: &[(&str, &str)] = &[
+    ("@", "a"),
+    ("4", "a"),
+    ("1", "i"),
+    ("!", "i"),
+    ("3", "e"),
+    ("0", "o"),
+    ("5", "s"),
+    ("$", "s"),
+    ("7", "t"),
+    ("+", "t"),
+    ("8", "b"),
+    ("9", "g"),
+];
+
+// Extended profanity list with semantic variations and common typos
+static PROFANITY_WORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+    vec![
+        // Original offensive words
+        "damn", "hell", "crap", "ass", "bitch", "bastard", "piss", "fuck", "shit",
+        "asshole", "dick", "cock", "pussy", "whore", "slut", "cunt",
+        // Semantic variations and euphemisms
+        "fk", "f*k", "f***", "fu*k", "fck", "fcuk",
+        "sh*t", "s*it", "sh1t", "shyt", "sheit",
+        "b*tch", "bit*h", "b!tch", "biatch", "btch",
+        "a**", "a$s", "azz", "arse",
+        "h*ll", "hel", "h3ll",
+        "d@mn", "damn", "dammit", "damnit",
+        "c*ck", "c0ck", "c**k", "cawk",
+        "pu$$y", "p*ssy", "puss1", "kitty", // some are context-dependent
+        "wh0re", "wh*re", "hoar",
+        "sl*t", "slyt", "sloot",
+        "c*nt", "cunt", "cnt", // might catch false positives
+        // Indian Hinglish variations with typos
+        "bc", "b.c", "b c", "bhd",
+        "mf", "m.f", "m f", "mofo",
+        // Extended Hinglish (case-insensitive handled by regex)
+        "lodu", "lod", "loda", "lodu",
+        "chutiya", "chut", "chutya", "chutiye",
+        "gaandu", "gandu", "gaand",
+        "harami", "haram", "haramkhor",
+        "madarchod", "madarc", "maadarc",
+        "behenchod", "bewakoof", "bevkoof",
+        "randi", "rand", "randiya",
+        "ullu", "ull",
+        "saali", "sali",
+        "teri", "tere",
+    ]
+    .into_iter()
+    .collect()
+});
+
 // Compile regexes at startup
 static URL_REGEX: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"https?://[^\s]+|www\.[^\s]+").unwrap());
@@ -169,9 +222,13 @@ impl ModerationService {
     }
 
     /// Check for profanity and vulgar language
-    /// Handles English profanity patterns and Hinglish text
+    /// Handles English profanity patterns, Hinglish text, leet speak, and common typos
     async fn check_profanity(&self, content: &str) -> ModerationResult {
-        // Check for English profanity patterns
+        // Normalize the text for checking (handle leet speak, special characters, etc.)
+        let normalized = self.normalize_text_for_profanity_check(content);
+        let normalized_lower = normalized.to_lowercase();
+
+        // Check direct regex match first (existing ENGLISH_PROFANITY regex)
         if ENGLISH_PROFANITY.is_match(content) {
             return ModerationResult::blocked(
                 "Profanity or offensive language detected".to_string(),
@@ -179,7 +236,40 @@ impl ModerationService {
             );
         }
 
-        // Basic Hinglish profanity patterns (common offensive words transliterated)
+        // Check normalized text against profanity word list
+        let words: Vec<&str> = normalized_lower.split_whitespace().collect();
+        for word in &words {
+            // Remove punctuation from word for checking
+            let clean_word = word.trim_matches(|c: char| !c.is_alphanumeric());
+            
+            if PROFANITY_WORDS.contains(clean_word) {
+                return ModerationResult::blocked(
+                    "Profanity or offensive language detected".to_string(),
+                    ModerationViolationType::Profanity,
+                );
+            }
+
+            // Check for partial matches with fuzzy detection
+            if self.fuzzy_profanity_check(clean_word) {
+                return ModerationResult::blocked(
+                    "Offensive or vulgar language detected".to_string(),
+                    ModerationViolationType::Profanity,
+                );
+            }
+        }
+
+        // Check for character-spaced profanity (e.g., "b i t c h", "f*** you")
+        let despaced = content.to_lowercase().split_whitespace().collect::<Vec<_>>().join("");
+        for word in PROFANITY_WORDS.iter() {
+            if despaced.contains(word) && word.len() > 2 {
+                return ModerationResult::blocked(
+                    "Offensive or vulgar language detected".to_string(),
+                    ModerationViolationType::Profanity,
+                );
+            }
+        }
+
+        // Hinglish pattern checks (unchanged for robustness)
         let hinglish_offensive = vec![
             r"(?i)\b(bc|bhosdike|lodu|chutiya|gaandu|gandu|harami|besharam)\b",
             r"(?i)\b(madarchod|mdarc|behenchod|bevkuf|chakka)\b",
@@ -198,6 +288,133 @@ impl ModerationService {
         }
 
         ModerationResult::allowed()
+    }
+
+    /// Normalize text by removing leet speak and special character substitutions
+    fn normalize_text_for_profanity_check(&self, text: &str) -> String {
+        let mut normalized = text.to_string();
+        
+        // Replace leet speak characters
+        for (leet_char, normal_char) in LEET_SPEAK_MAP {
+            normalized = normalized.replace(leet_char, normal_char);
+        }
+        
+        // Remove extra special characters that might be used to bypass filters
+        normalized = normalized
+            .replace("*", "")
+            .replace("!", "")
+            .replace("$", "")
+            .replace("@", "a")
+            .replace("#", "")
+            .replace("~", "")
+            .replace("^", "");
+        
+        normalized
+    }
+
+    /// Fuzzy check for profanity - detects common misspellings and variations
+    /// Returns true if word is likely a variation of a profane word
+    fn fuzzy_profanity_check(&self, word: &str) -> bool {
+        if word.len() < 3 {
+            return false;
+        }
+
+        // Check for repeated character patterns (e.g., "fuckkkk" or "biiitch")
+        let has_excessive_repeats = word
+            .chars()
+            .zip(word.chars().skip(1))
+            .zip(word.chars().skip(2))
+            .any(|((a, b), c)| a == b && b == c);
+
+        if has_excessive_repeats && self.contains_profane_root(word) {
+            return true;
+        }
+
+        // Only do Levenshtein check for words that are within a reasonable range
+        // of known profane words, and only if word is at least 4 chars
+        if word.len() >= 4 {
+            for profane_word in PROFANITY_WORDS.iter() {
+                // Only compare against profane words with similar length
+                if profane_word.len() > 2 && (word.len() as i32 - profane_word.len() as i32).abs() <= 2 {
+                    if self.levenshtein_distance(word, profane_word) <= 1 {
+                        // Double-check it's actually a profanity variant
+                        if self.is_profanity_variant(word, profane_word) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        false
+    }
+
+    /// Check if a word is a variant of a profane word (not just coincidentally similar)
+    fn is_profanity_variant(&self, word: &str, profane_word: &str) -> bool {
+        // Avoid false positives by checking if the word contains the core of the profane word
+        if profane_word.len() > 3 {
+            // For longer words, require the core to be present
+            let core = &profane_word[0..std::cmp::min(4, profane_word.len())];
+            return word.contains(core);
+        }
+        true
+    }
+
+    /// Check if word contains the root of a profane word
+    fn contains_profane_root(&self, word: &str) -> bool {
+        let common_roots = vec![
+            "fuck", "shit", "damn", "bitch", "cock", "ass", "cunt",
+            "chut", "gand", "maadar", "lod", "rand",
+        ];
+
+        for root in common_roots {
+            if word.contains(root) {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    /// Calculate Levenshtein distance between two strings
+    /// Useful for detecting common typos in offensive words
+    fn levenshtein_distance(&self, s1: &str, s2: &str) -> usize {
+        let len1 = s1.len();
+        let len2 = s2.len();
+        
+        if len1 == 0 {
+            return len2;
+        }
+        if len2 == 0 {
+            return len1;
+        }
+
+        let mut matrix = vec![vec![0; len2 + 1]; len1 + 1];
+
+        for i in 0..=len1 {
+            matrix[i][0] = i;
+        }
+        for j in 0..=len2 {
+            matrix[0][j] = j;
+        }
+
+        let s1_chars: Vec<char> = s1.chars().collect();
+        let s2_chars: Vec<char> = s2.chars().collect();
+
+        for i in 1..=len1 {
+            for j in 1..=len2 {
+                let cost = if s1_chars[i - 1] == s2_chars[j - 1] { 0 } else { 1 };
+                matrix[i][j] = std::cmp::min(
+                    std::cmp::min(
+                        matrix[i - 1][j] + 1,     // deletion
+                        matrix[i][j - 1] + 1,     // insertion
+                    ),
+                    matrix[i - 1][j - 1] + cost, // substitution
+                );
+            }
+        }
+
+        matrix[len1][len2]
     }
 
     /// Check if message is relevant to rental/property context
@@ -430,4 +647,103 @@ mod tests {
         let result = service.check_spam(content);
         assert!(result.is_allowed);
     }
-}
+
+    #[tokio::test]
+    async fn test_leet_speak_profanity() {
+        let service = ModerationService::new(None);
+        
+        // Test leet speak variations
+        let test_cases = vec![
+            "f*ck you",     // asterisk
+            "sh1t man",     // number substitution
+            "f*** off",     // asterisk censoring
+            "b!tch please", // exclamation mark
+            "a$$hole",      // dollar signs
+            "d@mn it",      // at symbol
+        ];
+        
+        for case in test_cases {
+            let result = service.check_profanity(case).await;
+            assert!(!result.is_allowed, "Failed to detect: {}", case);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_spaced_profanity() {
+        let service = ModerationService::new(None);
+        
+        // Test spaced out profanity
+        let test_cases = vec![
+            "b i t c h",
+            "f u c k",
+            "s h i t",
+            "a s s h o l e",
+        ];
+        
+        for case in test_cases {
+            let result = service.check_profanity(case).await;
+            assert!(!result.is_allowed, "Failed to detect spaced: {}", case);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_hinglish_profanity() {
+        let service = ModerationService::new(None);
+        
+        // Test Hinglish variations
+        let test_cases = vec![
+            "bc tu kaun hai",
+            "lodu sale",
+            "chutiya insaan",
+            "gaandu harami",
+            "madarchod",
+            "randi ka bacha",
+            "ullu banaya",
+        ];
+        
+        for case in test_cases {
+            let result = service.check_profanity(case).await;
+            assert!(!result.is_allowed, "Failed to detect Hinglish: {}", case);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_typo_variations() {
+        let service = ModerationService::new(None);
+        
+        // Test obvious shorthand variations
+        let result = service.check_profanity("fk you").await;
+        assert!(!result.is_allowed, "Should detect 'fk' as profanity variant");
+    }
+
+    #[tokio::test]
+    async fn test_repeated_character_profanity() {
+        let service = ModerationService::new(None);
+        
+        // Test repeated characters with profane roots
+        let result = service.check_profanity("fuckkkk").await;
+        assert!(!result.is_allowed, "Should detect repeated profanity");
+    }
+
+    #[tokio::test]
+    async fn test_valid_messages_not_flagged() {
+        let service = ModerationService::new(None);
+        
+        // Test legitimate rental-related messages
+        let result = service.check_profanity("Looking for a 2 BHK flat in Mumbai").await;
+        assert!(result.is_allowed, "Should not flag legitimate flat rental query");
+        
+        let result = service.check_profanity("What's the rent for this property?").await;
+        assert!(result.is_allowed, "Should not flag rent inquiry");
+    }
+
+    #[test]
+    fn test_levenshtein_distance() {
+        let service = ModerationService::new(None);
+        
+        // Test distance calculation
+        assert_eq!(service.levenshtein_distance("cat", "cat"), 0);
+        assert_eq!(service.levenshtein_distance("cat", "car"), 1);
+        assert_eq!(service.levenshtein_distance("fuck", "fuk"), 1);
+        assert_eq!(service.levenshtein_distance("shit", "sheit"), 1);
+    }}
